@@ -2,7 +2,7 @@
 
 A web-based telemetry visualization system for receiving, plotting, and logging data from RFD900x-based rocket systems via serial communication.
 
-<img width="774" height="898" alt="{BF259B54-1D1D-4047-8685-93C9358EE935}" src="https://github.com/user-attachments/assets/5c9dbad0-d627-42dd-8bb5-37f588ef90c9" />
+<img width="769" height="895" alt="{D2B2AF04-38C0-4C64-8CBC-81762E46A7DC}" src="https://github.com/user-attachments/assets/c3f66cae-39ad-43e5-ad87-7fe647c7c8fd" />
 
 ## Features
 
