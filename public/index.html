@@ -27,6 +27,10 @@
                     <span class="status-label">Data Points:</span>
                     <span id="data-count" class="status-value">0</span>
                 </div>
+                <div class="status-item">
+                    <span class="status-label">Messages Received:</span>
+                    <span id="message-count" class="status-value">0</span>
+                </div>
             </div>
         </header>
 
@@ -54,6 +58,15 @@
                 <button id="connect-btn" class="btn btn-primary">Connect</button>
                 <button id="disconnect-btn" class="btn btn-secondary" disabled>Disconnect</button>
                 <button id="clear-data-btn" class="btn btn-warning">Clear Data</button>
+            </div>
+            
+            <div class="control-group">
+                <label>
+                    <input type="checkbox" id="debug-mode"> Debug Mode
+                </label>
+                <label>
+                    <input type="checkbox" id="full-logging"> Full Telemetry Logging
+                </label>
             </div>
         </div>
 

@@ -8,6 +8,16 @@ const moment = require('moment');
 const path = require('path');
 const fs = require('fs');
 
+// Debug configuration
+const DEBUG_ENABLED = false; // Set to true to enable debug console logs
+
+// Debug wrapper function
+function debugLog(...args) {
+    if (DEBUG_ENABLED) {
+        console.log(...args);
+    }
+}
+
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
@@ -50,7 +60,8 @@ function initializeCsvWriter() {
             { id: 'altitude_pressure', title: 'Altitude Pressure (m)' },
             { id: 'pressure', title: 'Pressure (Pa)' },
             { id: 'gps_valid', title: 'GPS Valid' },
-            { id: 'pressure_valid', title: 'Pressure Valid' }
+            { id: 'pressure_valid', title: 'Pressure Valid' },
+            { id: 'rssi', title: 'RSSI (dBm)' }
         ]
     });
     
@@ -61,10 +72,10 @@ function initializeCsvWriter() {
 // Parse telemetry data
 function parseTelemetryData(data) {
     const parts = data.trim().split(',');
-    console.log(`Parsing data: "${data.trim()}" -> ${parts.length} parts:`, parts);
+    debugLog(`Parsing data: "${data.trim()}" -> ${parts.length} parts:`, parts);
     
-    if (parts.length !== 10 || parts[0] !== 'TELEM') {
-        console.log(`Parse failed: length=${parts.length}, first=${parts[0]}`);
+    if (parts.length !== 11 || parts[0] !== 'TELEM') {
+        debugLog(`Parse failed: length=${parts.length}, first=${parts[0]}`);
         return null;
     }
     
@@ -77,16 +88,17 @@ function parseTelemetryData(data) {
         altitude_pressure: parseFloat(parts[6]),
         pressure: parseFloat(parts[7]),
         gps_valid: parts[8] === '1' || parts[8].toLowerCase() === 'true',
-        pressure_valid: parts[9] === '1' || parts[9].toLowerCase() === 'true'
+        pressure_valid: parts[9] === '1' || parts[9].toLowerCase() === 'true',
+        rssi: parseFloat(parts[10]) // RSSI in dBm
     };
     
-    console.log('Parsed telemetry:', parsed);
+    debugLog('Parsed telemetry:', parsed);
     return parsed;
 }
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {
-    console.log('Client connected');
+    debugLog('Client connected');
     
     // Send current data to new client
     socket.emit('telemetry-history', telemetryData);
@@ -120,10 +132,10 @@ io.on('connection', (socket) => {
             });
             
             parser.on('data', async (data) => {
-                console.log(`Raw serial data received: "${data}"`);
+                debugLog(`Raw serial data received: "${data}"`);
                 const telemetry = parseTelemetryData(data);
                 if (telemetry) {
-                    console.log('Telemetry parsed successfully');
+                    debugLog('Telemetry parsed successfully');
                     // Add server timestamp
                     telemetry.server_timestamp = moment().toISOString();
                     
@@ -136,23 +148,23 @@ io.on('connection', (socket) => {
                     }
                     
                     // Emit to all clients
-                    console.log('Emitting telemetry data to clients');
+                    debugLog('Emitting telemetry data to clients');
                     io.emit('telemetry-data', telemetry);
                     
                     // Log to CSV
                     if (csvWriter) {
                         try {
-                            console.log('Writing to CSV...');
+                            debugLog('Writing to CSV...');
                             await csvWriter.writeRecords([telemetry]);
-                            console.log('CSV write successful');
+                            debugLog('CSV write successful');
                         } catch (err) {
                             console.error('CSV write error:', err);
                         }
                     } else {
-                        console.log('No CSV writer available');
+                        debugLog('No CSV writer available');
                     }
                 } else {
-                    console.log('Failed to parse telemetry data');
+                    debugLog('Failed to parse telemetry data');
                 }
             });
             
@@ -166,7 +178,7 @@ io.on('connection', (socket) => {
     socket.on('disconnect-serial', () => {
         if (serialPort && serialPort.isOpen) {
             serialPort.close(() => {
-                console.log('Serial port closed');
+                debugLog('Serial port closed');
                 socket.emit('serial-status', { connected: false });
             });
         }
@@ -257,15 +269,15 @@ function getLocalIP() {
 server.listen(PORT, '0.0.0.0', () => {
     const localIP = getLocalIP();
     console.log('='.repeat(60));
-    console.log('🚀 ROCKET ESP32 GROUND STATION SERVER STARTED');
+    console.log('ROCKET ESP32 GROUND STATION SERVER STARTED');
     console.log('='.repeat(60));
-    console.log(`📡 Local access:    http://localhost:${PORT}`);
-    console.log(`🌐 Network access:  http://${localIP}:${PORT}`);
+    console.log(`Local access:    http://localhost:${PORT}`);
+    console.log(`Network access:  http://${localIP}:${PORT}`);
     console.log('');
-    console.log('📋 Access from other devices on your network:');
+    console.log('Access from other devices on your network:');
     console.log(`   • Computers: http://${localIP}:${PORT}`);
     console.log(`   • Phones/Tablets: http://${localIP}:${PORT}`);
     console.log('');
-    console.log('🔧 Make sure your firewall allows connections on port', PORT);
+    console.log('Make sure your firewall allows connections on port', PORT);
     console.log('='.repeat(60));
 });

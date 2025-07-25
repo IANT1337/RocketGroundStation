@@ -1,6 +1,17 @@
 // Initialize socket connection
 const socket = io();
 
+// Debug configuration
+let DEBUG_ENABLED = false; // Set to true to enable debug console logs
+let FULL_LOGGING_ENABLED = false; // Set to true to log every telemetry message
+
+// Debug wrapper function
+function debugLog(...args) {
+    if (DEBUG_ENABLED) {
+        console.log(...args);
+    }
+}
+
 // Chart instances
 let altitudeChart = null;
 let pressureChart = null;
@@ -13,6 +24,18 @@ let altitudePressureData = [];
 let pressureData = [];
 let latitudeData = [];
 let longitudeData = [];
+let rssiData = []; // RSSI data array
+
+// Telemetry averaging for log display
+let telemetryBuffer = [];
+let telemetryCounter = 0;
+const TELEMETRY_LOG_INTERVAL = 10; // Log every 10th telemetry message as average
+const TELEMETRY_AVERAGE_WINDOW = 10; // Average over last 10 messages
+
+// GPS validity tracking
+let lastGpsValidTime = null;
+let lastGpsValidState = null;
+const GPS_INVALID_THRESHOLD = 5000; // 5 seconds in milliseconds
 
 // DOM elements
 const elements = {
@@ -24,9 +47,12 @@ const elements = {
     refreshPortsBtn: document.getElementById('refresh-ports'),
     exportCsvBtn: document.getElementById('export-csv'),
     autoScrollCheckbox: document.getElementById('auto-scroll'),
+    debugModeCheckbox: document.getElementById('debug-mode'),
+    fullLoggingCheckbox: document.getElementById('full-logging'),
     serialStatus: document.getElementById('serial-status'),
     csvStatus: document.getElementById('csv-status'),
     dataCount: document.getElementById('data-count'),
+    messageCount: document.getElementById('message-count'),
     telemetryLog: document.getElementById('telemetry-log'),
     sleepCmd: document.getElementById('sleep-cmd'),
     maintCmd: document.getElementById('maint-cmd'),
@@ -49,7 +75,7 @@ const currentDataElements = {
 
 // Initialize charts
 function initializeCharts() {
-    console.log('Initializing charts...');
+    debugLog('Initializing charts...');
     
     // Check if Chart.js is available
     if (typeof Chart === 'undefined') {
@@ -59,7 +85,7 @@ function initializeCharts() {
         throw new Error('moment.js is not loaded');
     }
     
-    console.log('Chart.js version available, initializing charts...');
+    debugLog('Chart.js version available, initializing charts...');
     
     // Altitude Chart
     const altitudeCtx = document.getElementById('altitude-chart').getContext('2d');
@@ -191,6 +217,32 @@ function initializeCharts() {
     });
 }
 
+// Function to determine GPS validity status with 5-second delay
+function getGpsValidityStatus(currentGpsValid) {
+    const currentTime = Date.now();
+    
+    // If GPS state has changed, update the tracking
+    if (lastGpsValidState !== currentGpsValid) {
+        lastGpsValidState = currentGpsValid;
+        lastGpsValidTime = currentTime;
+    }
+    
+    // If GPS is currently valid, always show as valid
+    if (currentGpsValid) {
+        return true;
+    }
+    
+    // If GPS is invalid, check if it's been invalid for more than 5 seconds
+    if (!currentGpsValid && lastGpsValidTime !== null) {
+        const timeSinceChange = currentTime - lastGpsValidTime;
+        // Only show as invalid if it's been invalid for more than the threshold
+        return timeSinceChange < GPS_INVALID_THRESHOLD;
+    }
+    
+    // Default case - if we don't have tracking data yet, follow current state
+    return currentGpsValid;
+}
+
 // Update current data display
 function updateCurrentData(data) {
     Object.keys(currentDataElements).forEach(key => {
@@ -218,9 +270,9 @@ function updateCurrentData(data) {
             } else if (key === 'mode') {
                 // Handle numeric mode values
                 const modeNames = {
-                    '0': 'INIT',
-                    '1': 'PAD',
-                    '2': 'FLIGHT',
+                    '0': 'SLEEP',
+                    '1': 'FLIGHT',
+                    '2': 'MAINTENANCE',
                     '3': 'APOGEE',
                     '4': 'DESCENT',
                     '5': 'RECOVERY'
@@ -232,7 +284,12 @@ function updateCurrentData(data) {
                 value = typeof value === 'number' ? `${value.toFixed(1)} m` : '- m';
             } else if (key === 'pressure') {
                 value = typeof value === 'number' ? `${value.toFixed(0)} Pa` : '- Pa';
-            } else if (key === 'gps_valid' || key === 'pressure_valid') {
+            } else if (key === 'gps_valid') {
+                // Use the delayed GPS validity logic
+                const displayValid = getGpsValidityStatus(value);
+                element.className = `data-value status-indicator ${displayValid ? 'valid' : 'invalid'}`;
+                value = displayValid ? '✓ Valid' : '✗ Invalid';
+            } else if (key === 'pressure_valid') {
                 element.className = `data-value status-indicator ${value ? 'valid' : 'invalid'}`;
                 value = value ? '✓ Valid' : '✗ Invalid';
             }
@@ -246,7 +303,7 @@ function updateCurrentData(data) {
 
 // Update charts with new data
 function updateCharts(data) {
-    console.log('updateCharts called with:', data);
+    debugLog('updateCharts called with:', data);
     
     // Validate that we have the required chart instances
     if (!altitudeChart || !pressureChart || !gpsChart) {
@@ -266,7 +323,7 @@ function updateCharts(data) {
         throw new Error('Invalid timestamp: ' + data.server_timestamp);
     }
     
-    console.log('Timestamp:', timestamp.format());
+    debugLog('Timestamp:', timestamp.format());
     
     // Create a simple time label for the x-axis
     const timeLabel = timestamp.format('HH:mm:ss');
@@ -276,6 +333,7 @@ function updateCharts(data) {
     altitudeGpsData.push(data.altitude_gps);
     altitudePressureData.push(data.altitude_pressure);
     pressureData.push(data.pressure);
+    rssiData.push(data.rssi); // Store RSSI data
     
     // Add data to chart labels and datasets
     altitudeChart.data.labels.push(timeLabel);
@@ -285,11 +343,12 @@ function updateCharts(data) {
     pressureChart.data.labels.push(timeLabel);
     pressureChart.data.datasets[0].data.push(data.pressure);
     
-    console.log('Chart data lengths:', {
+    debugLog('Chart data lengths:', {
         timeLabels: timeLabels.length,
         altitudeGps: altitudeGpsData.length,
         altitudePressure: altitudePressureData.length,
         pressure: pressureData.length,
+        rssi: rssiData.length,
         altitudeChart0: altitudeChart.data.datasets[0].data.length,
         altitudeChart1: altitudeChart.data.datasets[1].data.length,
         pressureChart0: pressureChart.data.datasets[0].data.length
@@ -301,7 +360,7 @@ function updateCharts(data) {
             x: data.longitude,
             y: data.latitude
         });
-        console.log('Added GPS point:', data.longitude, data.latitude);
+        debugLog('Added GPS point:', data.longitude, data.latitude);
     }
     
     // Keep only last 100 points for time-series charts
@@ -311,6 +370,7 @@ function updateCharts(data) {
         altitudeGpsData.splice(0, altitudeGpsData.length - maxPoints);
         altitudePressureData.splice(0, altitudePressureData.length - maxPoints);
         pressureData.splice(0, pressureData.length - maxPoints);
+        rssiData.splice(0, rssiData.length - maxPoints); // Clean RSSI data array
         
         // Clean up chart data as well
         altitudeChart.data.labels.splice(0, altitudeChart.data.labels.length - maxPoints);
@@ -326,10 +386,10 @@ function updateCharts(data) {
     }
     
     // Update charts
-    console.log('Updating charts...');
+    debugLog('Updating charts...');
     try {
         altitudeChart.update('none');
-        console.log('Altitude chart updated');
+        debugLog('Altitude chart updated');
     } catch (error) {
         console.error('Error updating altitude chart:', error);
         throw error;
@@ -337,7 +397,7 @@ function updateCharts(data) {
     
     try {
         pressureChart.update('none');
-        console.log('Pressure chart updated');
+        debugLog('Pressure chart updated');
     } catch (error) {
         console.error('Error updating pressure chart:', error);
         throw error;
@@ -345,13 +405,121 @@ function updateCharts(data) {
     
     try {
         gpsChart.update('none');
-        console.log('GPS chart updated');
+        debugLog('GPS chart updated');
     } catch (error) {
         console.error('Error updating GPS chart:', error);
         throw error;
     }
     
-    console.log('All charts updated successfully');
+    debugLog('All charts updated successfully');
+}
+
+// Process telemetry for averaged logging
+function processTelemetryForLogging(data) {
+    // If full logging is enabled, log every message
+    if (FULL_LOGGING_ENABLED) {
+        const modeNames = {
+            '0': 'INIT',
+            '1': 'PAD',
+            '2': 'FLIGHT',
+            '3': 'APOGEE',
+            '4': 'DESCENT',
+            '5': 'RECOVERY'
+        };
+        const modeName = modeNames[data.mode] || data.mode;
+        const logMessage = `TELEM: ${modeName} | GPS: ${data.latitude?.toFixed(6)}, ${data.longitude?.toFixed(6)} | Alt: ${data.altitude_gps?.toFixed(1)}m (GPS), ${data.altitude_pressure?.toFixed(1)}m (Press) | Pressure: ${data.pressure?.toFixed(1)}Pa | Valid: GPS=${data.gps_valid ? 'Y' : 'N'}, Press=${data.pressure_valid ? 'Y' : 'N'}`;
+        addLogEntry(logMessage);
+        return;
+    }
+    
+    // Add to buffer for averaging
+    telemetryBuffer.push(data);
+    
+    // Keep buffer size manageable
+    if (telemetryBuffer.length > TELEMETRY_AVERAGE_WINDOW) {
+        telemetryBuffer.shift();
+    }
+    
+    telemetryCounter++;
+    
+    // Only log averaged data every N messages
+    if (telemetryCounter % TELEMETRY_LOG_INTERVAL === 0) {
+        // Calculate averages from buffer
+        const avgData = calculateTelemetryAverages();
+        const modeNames = {
+            '0': 'INIT',
+            '1': 'PAD',
+            '2': 'FLIGHT',
+            '3': 'APOGEE',
+            '4': 'DESCENT',
+            '5': 'RECOVERY'
+        };
+        
+        // Use the most recent mode (modes don't average well)
+        const modeName = modeNames[data.mode] || data.mode;
+        
+        const logMessage = `AVG TELEM (${telemetryBuffer.length} msgs): ${modeName} | GPS: ${avgData.latitude?.toFixed(6)}, ${avgData.longitude?.toFixed(6)} | Alt: ${avgData.altitude_gps?.toFixed(1)}m (GPS), ${avgData.altitude_pressure?.toFixed(1)}m (Press) | Pressure: ${avgData.pressure?.toFixed(1)}Pa | Valid: GPS=${data.gps_valid ? 'Y' : 'N'}, Press=${data.pressure_valid ? 'Y' : 'N'}`;
+        addLogEntry(logMessage);
+    }
+}
+
+// Calculate averages from telemetry buffer
+function calculateTelemetryAverages() {
+    if (telemetryBuffer.length === 0) return {};
+    
+    const sums = {
+        latitude: 0,
+        longitude: 0,
+        altitude_gps: 0,
+        altitude_pressure: 0,
+        pressure: 0,
+        rssi: 0
+    };
+    
+    let validCount = {
+        latitude: 0,
+        longitude: 0,
+        altitude_gps: 0,
+        altitude_pressure: 0,
+        pressure: 0,
+        rssi: 0
+    };
+    
+    telemetryBuffer.forEach(data => {
+        if (typeof data.latitude === 'number' && !isNaN(data.latitude)) {
+            sums.latitude += data.latitude;
+            validCount.latitude++;
+        }
+        if (typeof data.longitude === 'number' && !isNaN(data.longitude)) {
+            sums.longitude += data.longitude;
+            validCount.longitude++;
+        }
+        if (typeof data.altitude_gps === 'number' && !isNaN(data.altitude_gps)) {
+            sums.altitude_gps += data.altitude_gps;
+            validCount.altitude_gps++;
+        }
+        if (typeof data.altitude_pressure === 'number' && !isNaN(data.altitude_pressure)) {
+            sums.altitude_pressure += data.altitude_pressure;
+            validCount.altitude_pressure++;
+        }
+        if (typeof data.pressure === 'number' && !isNaN(data.pressure)) {
+            sums.pressure += data.pressure;
+            validCount.pressure++;
+        }
+        if (typeof data.rssi === 'number' && !isNaN(data.rssi)) {
+            sums.rssi += data.rssi;
+            validCount.rssi++;
+        }
+    });
+    
+    const averages = {};
+    Object.keys(sums).forEach(key => {
+        if (validCount[key] > 0) {
+            averages[key] = sums[key] / validCount[key];
+        }
+    });
+    
+    return averages;
 }
 
 // Add log entry
@@ -434,15 +602,27 @@ elements.flightCmd.addEventListener('click', () => {
     sendRocketCommand('FLIGHT');
 });
 
+// Debug mode controls
+elements.debugModeCheckbox.addEventListener('change', (e) => {
+    DEBUG_ENABLED = e.target.checked;
+    addLogEntry(`Debug mode ${DEBUG_ENABLED ? 'enabled' : 'disabled'}`, 'info');
+});
+
+elements.fullLoggingCheckbox.addEventListener('change', (e) => {
+    FULL_LOGGING_ENABLED = e.target.checked;
+    addLogEntry(`Full telemetry logging ${FULL_LOGGING_ENABLED ? 'enabled' : 'disabled'}`, 'info');
+});
+
 // Generate CSV content from current chart data
 function generateCsvContent() {
-    let csv = 'Timestamp,GPS_Altitude,Pressure_Altitude,Pressure,Longitude,Latitude\n';
+    let csv = 'Timestamp,GPS_Altitude,Pressure_Altitude,Pressure,Longitude,Latitude,RSSI\n';
     
     for (let i = 0; i < timeLabels.length; i++) {
         const timestamp = timeLabels[i].format('YYYY-MM-DD HH:mm:ss');
         const gpsAlt = altitudeGpsData[i] ? altitudeGpsData[i].y : '';
         const pressAlt = altitudePressureData[i] ? altitudePressureData[i].y : '';
         const pressure = pressureData[i] ? pressureData[i].y : '';
+        const rssi = rssiData[i] !== undefined ? rssiData[i] : '';
         
         // Find corresponding GPS data
         let longitude = '';
@@ -455,7 +635,7 @@ function generateCsvContent() {
             latitude = gpsPoint.y;
         }
         
-        csv += `${timestamp},${gpsAlt},${pressAlt},${pressure},${longitude},${latitude}\n`;
+        csv += `${timestamp},${gpsAlt},${pressAlt},${pressure},${longitude},${latitude},${rssi}\n`;
     }
     
     return csv;
@@ -532,7 +712,11 @@ socket.on('csv-status', (status) => {
 });
 
 socket.on('telemetry-data', (data) => {
-    console.log('Received telemetry data:', data);
+    debugLog('Received telemetry data:', data);
+    
+    // Update message counter
+    const currentCount = parseInt(elements.messageCount.textContent) || 0;
+    elements.messageCount.textContent = currentCount + 1;
     
     try {
         updateCurrentData(data);
@@ -552,18 +736,8 @@ socket.on('telemetry-data', (data) => {
         elements.dataCount.textContent = (parseInt(elements.dataCount.textContent) || 0) + 1;
     }
     
-    // Add to log with proper mode formatting
-    const modeNames = {
-        '0': 'INIT',
-        '1': 'PAD',
-        '2': 'FLIGHT',
-        '3': 'APOGEE',
-        '4': 'DESCENT',
-        '5': 'RECOVERY'
-    };
-    const modeName = modeNames[data.mode] || data.mode;
-    const logMessage = `TELEM: ${modeName} | GPS: ${data.latitude?.toFixed(6)}, ${data.longitude?.toFixed(6)} | Alt: ${data.altitude_gps?.toFixed(1)}m (GPS), ${data.altitude_pressure?.toFixed(1)}m (Press) | Pressure: ${data.pressure?.toFixed(1)}Pa | Valid: GPS=${data.gps_valid ? 'Y' : 'N'}, Press=${data.pressure_valid ? 'Y' : 'N'}`;
-    addLogEntry(logMessage);
+    // Process telemetry for averaged logging instead of logging every message
+    processTelemetryForLogging(data);
 });
 
 socket.on('telemetry-history', (data) => {
@@ -581,6 +755,15 @@ socket.on('data-cleared', () => {
     altitudeGpsData.length = 0;
     altitudePressureData.length = 0;
     pressureData.length = 0;
+    rssiData.length = 0; // Clear RSSI data array
+    
+    // Clear telemetry averaging variables
+    telemetryBuffer.length = 0;
+    telemetryCounter = 0;
+    
+    // Reset GPS validity tracking
+    lastGpsValidTime = null;
+    lastGpsValidState = null;
     
     // Clear chart data
     altitudeChart.data.datasets[0].data.length = 0;
@@ -606,6 +789,7 @@ socket.on('data-cleared', () => {
     });
     
     elements.dataCount.textContent = '0';
+    elements.messageCount.textContent = '0';
     addLogEntry('All data cleared', 'warning');
 });
 
@@ -619,7 +803,7 @@ socket.on('command-error', (error) => {
 
 // Initialize the application
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('DOM Content Loaded - Initializing application...');
+    debugLog('DOM Content Loaded - Initializing application...');
     
     // Wait for libraries to load
     const checkLibraries = () => {
@@ -627,7 +811,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const momentAvailable = typeof moment !== 'undefined';
         const socketAvailable = typeof io !== 'undefined';
         
-        console.log('Library status:', {
+        debugLog('Library status:', {
             'Chart.js': chartAvailable,
             'moment.js': momentAvailable,
             'Socket.io': socketAvailable
@@ -673,11 +857,11 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function initializeApp() {
-    console.log('Initializing application...');
+    debugLog('Initializing application...');
     
     try {
         initializeCharts();
-        console.log('Charts initialized successfully');
+        debugLog('Charts initialized successfully');
     } catch (error) {
         console.error('Error initializing charts:', error);
         addLogEntry(`❌ Error initializing charts: ${error.message}`, 'error');
@@ -685,12 +869,12 @@ function initializeApp() {
     
     try {
         loadPorts();
-        console.log('Ports loading initiated');
+        debugLog('Ports loading initiated');
     } catch (error) {
         console.error('Error loading ports:', error);
         addLogEntry(`❌ Error loading ports: ${error.message}`, 'error');
     }
     
     addLogEntry('✅ Ground Station initialized');
-    console.log('Application initialization complete');
+    debugLog('Application initialization complete');
 }
