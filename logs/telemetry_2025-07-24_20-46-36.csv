@@ -1,6 +1,0 @@
-Timestamp,Mode,Latitude,Longitude,Altitude GPS (m),Altitude Pressure (m),Pressure (Pa),GPS Valid,Pressure Valid
-567676,2,0,0,0,208.27,988.48,false,true
-568679,2,0,0,0,207.98,988.52,false,true
-569681,2,0,0,0,208.36,988.47,false,true
-570682,2,0,0,0,208.05,988.51,false,true
-571684,2,0,0,0,207.72,988.55,false,true
