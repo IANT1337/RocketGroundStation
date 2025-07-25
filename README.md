@@ -1,10 +1,10 @@
-# 🚀 Rocket ESP32 Ground Station
+# Rocket ESP32 Ground Station
 
 A web-based telemetry visualization system for receiving, plotting, and logging data from ESP32-based rocket systems via serial communication.
 
 ## Features
 
-- **Real-time Data Reception**: Connects to ESP32 via serial COM port
+- **Real-time Data Reception**: Connects to RFD900x via serial COM port
 - **Live Visualization**: Interactive charts for altitude, pressure, and GPS position data
 - **Data Logging**: Automatic CSV logging with timestamped files
 - **Web Interface**: Modern, responsive web dashboard accessible on local network
@@ -139,13 +139,13 @@ This uses nodemon for automatic server restart on file changes.
 
 1. **Serial Port Access Denied**
    - Ensure no other applications are using the COM port
-   - Check if the ESP32 is properly connected
+   - Check if the RFD900x is properly connected
    - Try running with administrator privileges on Windows
 
 2. **No Data Received**
-   - Verify the baud rate matches your ESP32 configuration
+   - Verify the baud rate matches your RFD900x configuration
    - Check the data format matches the expected format
-   - Ensure the ESP32 is sending data in the correct format
+   - Ensure the RFD900x is sending data in the correct format
 
 3. **Charts Not Updating**
    - Check the browser console for JavaScript errors
