@@ -97,7 +97,7 @@ TELEM,51423,2,40.712800,-74.006000,1500.5,1485.2,95432,1,1
 ## Project Structure
 
 ```
-RocketESP32GroundStation/
+RocketGroundStation/
 ├── server.js              # Main server application
 ├── package.json           # Dependencies and scripts
 ├── public/                # Static web files
@@ -106,7 +106,6 @@ RocketESP32GroundStation/
 │   └── app.js            # Client-side JavaScript
 ├── logs/                 # CSV log files (auto-created)
 └── .github/
-    └── copilot-instructions.md
 ```
 
 ## Configuration
