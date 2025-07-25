@@ -1,4 +1,4 @@
-# Rocket ESP32 Ground Station
+# Rocket Ground Station
 
 A web-based telemetry visualization system for receiving, plotting, and logging data from RFD900x-based rocket systems via serial communication.
 
