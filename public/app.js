@@ -49,21 +49,33 @@ const currentDataElements = {
 
 // Initialize charts
 function initializeCharts() {
+    console.log('Initializing charts...');
+    
+    // Check if Chart.js is available
+    if (typeof Chart === 'undefined') {
+        throw new Error('Chart.js is not loaded');
+    }
+    if (typeof moment === 'undefined') {
+        throw new Error('moment.js is not loaded');
+    }
+    
+    console.log('Chart.js version available, initializing charts...');
+    
     // Altitude Chart
     const altitudeCtx = document.getElementById('altitude-chart').getContext('2d');
     altitudeChart = new Chart(altitudeCtx, {
         type: 'line',
         data: {
-            labels: timeLabels,
+            labels: [],
             datasets: [{
                 label: 'GPS Altitude (m)',
-                data: altitudeGpsData,
+                data: [],
                 borderColor: 'rgb(54, 162, 235)',
                 backgroundColor: 'rgba(54, 162, 235, 0.1)',
                 tension: 0.1
             }, {
                 label: 'Pressure Altitude (m)',
-                data: altitudePressureData,
+                data: [],
                 borderColor: 'rgb(255, 99, 132)',
                 backgroundColor: 'rgba(255, 99, 132, 0.1)',
                 tension: 0.1
@@ -74,11 +86,9 @@ function initializeCharts() {
             maintainAspectRatio: false,
             scales: {
                 x: {
-                    type: 'time',
-                    time: {
-                        displayFormats: {
-                            second: 'HH:mm:ss'
-                        }
+                    title: {
+                        display: true,
+                        text: 'Time'
                     }
                 },
                 y: {
@@ -106,10 +116,10 @@ function initializeCharts() {
     pressureChart = new Chart(pressureCtx, {
         type: 'line',
         data: {
-            labels: timeLabels,
+            labels: [],
             datasets: [{
                 label: 'Pressure (Pa)',
-                data: pressureData,
+                data: [],
                 borderColor: 'rgb(75, 192, 192)',
                 backgroundColor: 'rgba(75, 192, 192, 0.1)',
                 tension: 0.1
@@ -120,11 +130,9 @@ function initializeCharts() {
             maintainAspectRatio: false,
             scales: {
                 x: {
-                    type: 'time',
-                    time: {
-                        displayFormats: {
-                            second: 'HH:mm:ss'
-                        }
+                    title: {
+                        display: true,
+                        text: 'Time'
                     }
                 },
                 y: {
@@ -238,13 +246,54 @@ function updateCurrentData(data) {
 
 // Update charts with new data
 function updateCharts(data) {
-    const timestamp = moment(data.server_timestamp);
+    console.log('updateCharts called with:', data);
     
-    // Add new data point
-    timeLabels.push(timestamp);
-    altitudeGpsData.push({ x: timestamp, y: data.altitude_gps });
-    altitudePressureData.push({ x: timestamp, y: data.altitude_pressure });
-    pressureData.push({ x: timestamp, y: data.pressure });
+    // Validate that we have the required chart instances
+    if (!altitudeChart || !pressureChart || !gpsChart) {
+        console.error('Chart instances not initialized');
+        throw new Error('Chart instances not initialized');
+    }
+    
+    // Validate that moment is available
+    if (typeof moment !== 'function') {
+        console.error('Moment.js not available');
+        throw new Error('Moment.js not available');
+    }
+    
+    const timestamp = moment(data.server_timestamp);
+    if (!timestamp.isValid()) {
+        console.error('Invalid timestamp:', data.server_timestamp);
+        throw new Error('Invalid timestamp: ' + data.server_timestamp);
+    }
+    
+    console.log('Timestamp:', timestamp.format());
+    
+    // Create a simple time label for the x-axis
+    const timeLabel = timestamp.format('HH:mm:ss');
+    
+    // Add new data point to our arrays
+    timeLabels.push(timeLabel);
+    altitudeGpsData.push(data.altitude_gps);
+    altitudePressureData.push(data.altitude_pressure);
+    pressureData.push(data.pressure);
+    
+    // Add data to chart labels and datasets
+    altitudeChart.data.labels.push(timeLabel);
+    altitudeChart.data.datasets[0].data.push(data.altitude_gps);
+    altitudeChart.data.datasets[1].data.push(data.altitude_pressure);
+    
+    pressureChart.data.labels.push(timeLabel);
+    pressureChart.data.datasets[0].data.push(data.pressure);
+    
+    console.log('Chart data lengths:', {
+        timeLabels: timeLabels.length,
+        altitudeGps: altitudeGpsData.length,
+        altitudePressure: altitudePressureData.length,
+        pressure: pressureData.length,
+        altitudeChart0: altitudeChart.data.datasets[0].data.length,
+        altitudeChart1: altitudeChart.data.datasets[1].data.length,
+        pressureChart0: pressureChart.data.datasets[0].data.length
+    });
     
     // Update GPS chart if coordinates are valid
     if (data.gps_valid && data.latitude && data.longitude) {
@@ -252,21 +301,57 @@ function updateCharts(data) {
             x: data.longitude,
             y: data.latitude
         });
+        console.log('Added GPS point:', data.longitude, data.latitude);
     }
     
-    // Keep only last 100 points
+    // Keep only last 100 points for time-series charts
     const maxPoints = 100;
     if (timeLabels.length > maxPoints) {
         timeLabels.splice(0, timeLabels.length - maxPoints);
         altitudeGpsData.splice(0, altitudeGpsData.length - maxPoints);
         altitudePressureData.splice(0, altitudePressureData.length - maxPoints);
         pressureData.splice(0, pressureData.length - maxPoints);
+        
+        // Clean up chart data as well
+        altitudeChart.data.labels.splice(0, altitudeChart.data.labels.length - maxPoints);
+        altitudeChart.data.datasets[0].data.splice(0, altitudeChart.data.datasets[0].data.length - maxPoints);
+        altitudeChart.data.datasets[1].data.splice(0, altitudeChart.data.datasets[1].data.length - maxPoints);
+        pressureChart.data.labels.splice(0, pressureChart.data.labels.length - maxPoints);
+        pressureChart.data.datasets[0].data.splice(0, pressureChart.data.datasets[0].data.length - maxPoints);
+    }
+    
+    // Keep only last 100 points for GPS chart as well
+    if (gpsChart.data.datasets[0].data.length > maxPoints) {
+        gpsChart.data.datasets[0].data.splice(0, gpsChart.data.datasets[0].data.length - maxPoints);
     }
     
     // Update charts
-    altitudeChart.update('none');
-    pressureChart.update('none');
-    gpsChart.update('none');
+    console.log('Updating charts...');
+    try {
+        altitudeChart.update('none');
+        console.log('Altitude chart updated');
+    } catch (error) {
+        console.error('Error updating altitude chart:', error);
+        throw error;
+    }
+    
+    try {
+        pressureChart.update('none');
+        console.log('Pressure chart updated');
+    } catch (error) {
+        console.error('Error updating pressure chart:', error);
+        throw error;
+    }
+    
+    try {
+        gpsChart.update('none');
+        console.log('GPS chart updated');
+    } catch (error) {
+        console.error('Error updating GPS chart:', error);
+        throw error;
+    }
+    
+    console.log('All charts updated successfully');
 }
 
 // Add log entry
@@ -447,11 +532,25 @@ socket.on('csv-status', (status) => {
 });
 
 socket.on('telemetry-data', (data) => {
-    updateCurrentData(data);
-    updateCharts(data);
+    console.log('Received telemetry data:', data);
     
-    // Update data count
-    elements.dataCount.textContent = timeLabels.length;
+    try {
+        updateCurrentData(data);
+    } catch (error) {
+        console.error('Error updating current data:', error);
+        addLogEntry(`Error updating current data: ${error.message}`, 'error');
+    }
+    
+    try {
+        updateCharts(data);
+        // Update data count after successful chart update
+        elements.dataCount.textContent = timeLabels.length;
+    } catch (error) {
+        console.error('Error updating charts:', error);
+        addLogEntry(`Error updating charts: ${error.message}`, 'error');
+        // Still update data count even if charts fail
+        elements.dataCount.textContent = (parseInt(elements.dataCount.textContent) || 0) + 1;
+    }
     
     // Add to log with proper mode formatting
     const modeNames = {
@@ -482,6 +581,11 @@ socket.on('data-cleared', () => {
     altitudeGpsData.length = 0;
     altitudePressureData.length = 0;
     pressureData.length = 0;
+    
+    // Clear chart data
+    altitudeChart.data.datasets[0].data.length = 0;
+    altitudeChart.data.datasets[1].data.length = 0;
+    pressureChart.data.datasets[0].data.length = 0;
     gpsChart.data.datasets[0].data.length = 0;
     
     // Update charts
@@ -515,7 +619,78 @@ socket.on('command-error', (error) => {
 
 // Initialize the application
 document.addEventListener('DOMContentLoaded', () => {
-    initializeCharts();
-    loadPorts();
-    addLogEntry('Ground Station initialized');
+    console.log('DOM Content Loaded - Initializing application...');
+    
+    // Wait for libraries to load
+    const checkLibraries = () => {
+        const chartAvailable = typeof Chart !== 'undefined';
+        const momentAvailable = typeof moment !== 'undefined';
+        const socketAvailable = typeof io !== 'undefined';
+        
+        console.log('Library status:', {
+            'Chart.js': chartAvailable,
+            'moment.js': momentAvailable,
+            'Socket.io': socketAvailable
+        });
+        
+        if (!chartAvailable) {
+            console.error('Chart.js is not loaded');
+            addLogEntry('❌ Chart.js failed to load', 'error');
+            return false;
+        }
+        
+        if (!momentAvailable) {
+            console.error('moment.js is not loaded');
+            addLogEntry('❌ moment.js failed to load', 'error');
+            return false;
+        }
+        
+        if (!socketAvailable) {
+            console.error('Socket.io is not loaded');
+            addLogEntry('❌ Socket.io failed to load', 'error');
+            return false;
+        }
+        
+        return true;
+    };
+    
+    // Try to initialize after a short delay to ensure scripts are loaded
+    setTimeout(() => {
+        if (!checkLibraries()) {
+            console.error('Required libraries not loaded, retrying in 1 second...');
+            setTimeout(() => {
+                if (checkLibraries()) {
+                    initializeApp();
+                } else {
+                    console.error('Failed to load required libraries after retry');
+                    addLogEntry('❌ Failed to load required libraries. Please refresh the page.', 'error');
+                }
+            }, 1000);
+        } else {
+            initializeApp();
+        }
+    }, 200);
 });
+
+function initializeApp() {
+    console.log('Initializing application...');
+    
+    try {
+        initializeCharts();
+        console.log('Charts initialized successfully');
+    } catch (error) {
+        console.error('Error initializing charts:', error);
+        addLogEntry(`❌ Error initializing charts: ${error.message}`, 'error');
+    }
+    
+    try {
+        loadPorts();
+        console.log('Ports loading initiated');
+    } catch (error) {
+        console.error('Error loading ports:', error);
+        addLogEntry(`❌ Error loading ports: ${error.message}`, 'error');
+    }
+    
+    addLogEntry('✅ Ground Station initialized');
+    console.log('Application initialization complete');
+}

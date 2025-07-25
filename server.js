@@ -25,6 +25,9 @@ const MAX_DATA_POINTS = 100; // Keep last 100 data points for plotting
 // Serve static files
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Serve Chart.js from node_modules
+app.use('/chart.js', express.static(path.join(__dirname, 'node_modules/chart.js/dist')));
+
 // Initialize CSV writer
 function initializeCsvWriter() {
     const timestamp = moment().format('YYYY-MM-DD_HH-mm-ss');
@@ -58,11 +61,14 @@ function initializeCsvWriter() {
 // Parse telemetry data
 function parseTelemetryData(data) {
     const parts = data.trim().split(',');
+    console.log(`Parsing data: "${data.trim()}" -> ${parts.length} parts:`, parts);
+    
     if (parts.length !== 10 || parts[0] !== 'TELEM') {
+        console.log(`Parse failed: length=${parts.length}, first=${parts[0]}`);
         return null;
     }
     
-    return {
+    const parsed = {
         timestamp: parts[1], // Raw timestamp (could be milliseconds or other format)
         mode: parts[2], // Mode as received (could be number or string)
         latitude: parseFloat(parts[3]),
@@ -73,6 +79,9 @@ function parseTelemetryData(data) {
         gps_valid: parts[8] === '1' || parts[8].toLowerCase() === 'true',
         pressure_valid: parts[9] === '1' || parts[9].toLowerCase() === 'true'
     };
+    
+    console.log('Parsed telemetry:', parsed);
+    return parsed;
 }
 
 // Socket.IO connection handling
@@ -111,8 +120,10 @@ io.on('connection', (socket) => {
             });
             
             parser.on('data', async (data) => {
+                console.log(`Raw serial data received: "${data}"`);
                 const telemetry = parseTelemetryData(data);
                 if (telemetry) {
+                    console.log('Telemetry parsed successfully');
                     // Add server timestamp
                     telemetry.server_timestamp = moment().toISOString();
                     
@@ -125,16 +136,23 @@ io.on('connection', (socket) => {
                     }
                     
                     // Emit to all clients
+                    console.log('Emitting telemetry data to clients');
                     io.emit('telemetry-data', telemetry);
                     
                     // Log to CSV
                     if (csvWriter) {
                         try {
+                            console.log('Writing to CSV...');
                             await csvWriter.writeRecords([telemetry]);
+                            console.log('CSV write successful');
                         } catch (err) {
                             console.error('CSV write error:', err);
                         }
+                    } else {
+                        console.log('No CSV writer available');
                     }
+                } else {
+                    console.log('Failed to parse telemetry data');
                 }
             });
             

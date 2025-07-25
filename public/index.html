@@ -9,9 +9,6 @@
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
     <script src="/socket.io/socket.io.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/moment@2.29.4/moment.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-moment@1.0.1/dist/chartjs-adapter-moment.bundle.min.js"></script>
 </head>
 <body>
     <div class="container">
@@ -146,6 +143,9 @@
         </div>
     </div>
 
+    <!-- Load Chart.js and dependencies before our app script -->
+    <script src="https://cdn.jsdelivr.net/npm/moment@2.29.4/moment.min.js"></script>
+    <script src="/chart.js/chart.min.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
