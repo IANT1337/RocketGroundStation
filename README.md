@@ -1,6 +1,6 @@
 # Rocket ESP32 Ground Station
 
-A web-based telemetry visualization system for receiving, plotting, and logging data from ESP32-based rocket systems via serial communication.
+A web-based telemetry visualization system for receiving, plotting, and logging data from RFD900x-based rocket systems via serial communication.
 
 ## Features
 
@@ -69,8 +69,8 @@ TELEM,51423,2,40.712800,-74.006000,1500.5,1485.2,95432,1,1
    - **Network access**: `http://[YOUR_IP]:3000` (displayed in console)
    - Other devices on your network can access the same URL
 
-3. **Connect to ESP32**:
-   - Select your ESP32's COM port from the dropdown
+3. **Connect to RFD900x**:
+   - Select your RFD900x's COM port from the dropdown
    - Set the baud rate (default: 115200)
    - Click the Connect button to start receiving data
 
@@ -160,7 +160,7 @@ This uses nodemon for automatic server restart on file changes.
 
 5. **Command Sending Fails**
    - Verify the serial port is connected and open
-   - Check that the ESP32 is configured to receive commands
+   - Check that the RFD900x is configured to receive commands
    - Ensure the command format matches what your ESP32 expects
 
 ### Port Permissions (Linux/macOS)
