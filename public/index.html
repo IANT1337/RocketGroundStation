@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rocket ESP32 Ground Station</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/moment@2.29.4/moment.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-moment@1.0.1/dist/chartjs-adapter-moment.bundle.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚀 Rocket ESP32 Ground Station</h1>
+            <div class="status-bar">
+                <div class="status-item">
+                    <span class="status-label">Serial:</span>
+                    <span id="serial-status" class="status-value disconnected">Disconnected</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Logging:</span>
+                    <span id="csv-status" class="status-value">Inactive</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Data Points:</span>
+                    <span id="data-count" class="status-value">0</span>
+                </div>
+            </div>
+        </header>
+
+        <div class="controls-panel">
+            <div class="control-group">
+                <label for="port-select">Serial Port:</label>
+                <select id="port-select">
+                    <option value="">Select Port...</option>
+                </select>
+                <button id="refresh-ports">🔄</button>
+            </div>
+            
+            <div class="control-group">
+                <label for="baud-rate">Baud Rate:</label>
+                <select id="baud-rate">
+                    <option value="9600">9600</option>
+                    <option value="19200">19200</option>
+                    <option value="38400">38400</option>
+                    <option value="57600">57600</option>
+                    <option value="115200" selected>115200</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <button id="connect-btn" class="btn btn-primary">Connect</button>
+                <button id="disconnect-btn" class="btn btn-secondary" disabled>Disconnect</button>
+                <button id="clear-data-btn" class="btn btn-warning">Clear Data</button>
+            </div>
+        </div>
+
+        <div class="rocket-control-panel">
+            <h3>🚀 Rocket Control</h3>
+            <div class="control-buttons">
+                <button id="sleep-cmd" class="btn btn-control btn-sleep" disabled>SLEEP</button>
+                <button id="maint-cmd" class="btn btn-control btn-maint" disabled>MAINT</button>
+                <button id="flight-cmd" class="btn btn-control btn-flight" disabled>FLIGHT</button>
+            </div>
+            <div class="control-status">
+                <span class="control-label">Last Command:</span>
+                <span id="last-command" class="control-value">None</span>
+            </div>
+        </div>
+
+        <div class="data-panel">
+            <div class="current-data">
+                <h3>Current Telemetry</h3>
+                <div class="data-grid">
+                    <div class="data-item">
+                        <span class="data-label">Timestamp:</span>
+                        <span id="current-timestamp" class="data-value">-</span>
+                    </div>
+                    <div class="data-item">
+                        <span class="data-label">Mode:</span>
+                        <span id="current-mode" class="data-value">-</span>
+                    </div>
+                    <div class="data-item">
+                        <span class="data-label">Latitude:</span>
+                        <span id="current-latitude" class="data-value">-</span>
+                    </div>
+                    <div class="data-item">
+                        <span class="data-label">Longitude:</span>
+                        <span id="current-longitude" class="data-value">-</span>
+                    </div>
+                    <div class="data-item">
+                        <span class="data-label">GPS Altitude:</span>
+                        <span id="current-altitude-gps" class="data-value">- m</span>
+                    </div>
+                    <div class="data-item">
+                        <span class="data-label">Pressure Altitude:</span>
+                        <span id="current-altitude-pressure" class="data-value">- m</span>
+                    </div>
+                    <div class="data-item">
+                        <span class="data-label">Pressure:</span>
+                        <span id="current-pressure" class="data-value">- Pa</span>
+                    </div>
+                    <div class="data-item">
+                        <span class="data-label">GPS Valid:</span>
+                        <span id="current-gps-valid" class="data-value status-indicator">-</span>
+                    </div>
+                    <div class="data-item">
+                        <span class="data-label">Pressure Valid:</span>
+                        <span id="current-pressure-valid" class="data-value status-indicator">-</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="charts-panel">
+            <div class="chart-container">
+                <h3>Altitude Data</h3>
+                <canvas id="altitude-chart"></canvas>
+            </div>
+            
+            <div class="chart-container">
+                <h3>Pressure Data</h3>
+                <canvas id="pressure-chart"></canvas>
+            </div>
+            
+            <div class="chart-container">
+                <h3>GPS Position</h3>
+                <canvas id="gps-chart"></canvas>
+            </div>
+        </div>
+
+        <div class="log-panel">
+            <h3>Telemetry Log</h3>
+            <div class="log-controls">
+                <label>
+                    <input type="checkbox" id="auto-scroll" checked> Auto-scroll
+                </label>
+                <button id="export-csv" class="btn btn-info">Export CSV</button>
+            </div>
+            <div id="telemetry-log" class="log-content"></div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

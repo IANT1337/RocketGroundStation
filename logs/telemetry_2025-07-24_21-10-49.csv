@@ -1,0 +1,4 @@
+Timestamp,Mode,Latitude,Longitude,Altitude GPS (m),Altitude Pressure (m),Pressure (Pa),GPS Valid,Pressure Valid
+2021597,1,0,0,0,209.18,988.38,false,true
+2022598,1,0,0,0,208.78,988.42,false,true
+2023599,1,0,0,0,209.7,988.32,false,true

@@ -1,0 +1,4 @@
+Timestamp,Mode,Latitude,Longitude,Altitude GPS (m),Altitude Pressure (m),Pressure (Pa),GPS Valid,Pressure Valid
+873521,2,0,0,0,207.22,988.61,false,true
+874523,2,0,0,0,207.5,988.57,false,true
+875525,2,0,0,0,208,988.51,false,true
