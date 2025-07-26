@@ -32,6 +32,13 @@ let csvWriter = null;
 let telemetryData = [];
 const MAX_DATA_POINTS = 100; // Keep last 100 data points for plotting
 
+// CSV Buffering Configuration
+let csvBuffer = [];
+const CSV_BUFFER_SIZE = 200; // Buffer up to 50 records before writing
+const CSV_FLUSH_INTERVAL = 5000; // Force flush every 5 seconds (in milliseconds)
+let lastCsvFlush = Date.now();
+let csvFlushTimer = null;
+
 // Serve static files
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -96,6 +103,77 @@ function parseTelemetryData(data) {
     return parsed;
 }
 
+// CSV Buffer Management Functions
+async function flushCsvBuffer() {
+    if (csvBuffer.length === 0 || !csvWriter) {
+        return;
+    }
+    
+    try {
+        debugLog(`Flushing CSV buffer: ${csvBuffer.length} records`);
+        await csvWriter.writeRecords(csvBuffer);
+        csvBuffer = []; // Clear the buffer after successful write
+        lastCsvFlush = Date.now();
+        debugLog('CSV buffer flush successful');
+        
+        // Emit updated buffer status to clients
+        io.emit('csv-buffer-status', { 
+            bufferSize: 0, 
+            maxSize: CSV_BUFFER_SIZE,
+            lastFlush: lastCsvFlush 
+        });
+    } catch (err) {
+        console.error('CSV buffer flush error:', err);
+        // Don't clear buffer on error - will retry on next flush
+    }
+}
+
+function addToCsvBuffer(telemetry) {
+    csvBuffer.push(telemetry);
+    
+    // Emit buffer status to clients
+    io.emit('csv-buffer-status', { 
+        bufferSize: csvBuffer.length, 
+        maxSize: CSV_BUFFER_SIZE,
+        lastFlush: lastCsvFlush 
+    });
+    
+    // Check if we should flush based on buffer size
+    if (csvBuffer.length >= CSV_BUFFER_SIZE) {
+        flushCsvBuffer();
+        return;
+    }
+    
+    // Check if we should flush based on time
+    const timeSinceLastFlush = Date.now() - lastCsvFlush;
+    if (timeSinceLastFlush >= CSV_FLUSH_INTERVAL) {
+        flushCsvBuffer();
+        return;
+    }
+    
+    // Set up timer for time-based flush if not already set
+    if (!csvFlushTimer && csvBuffer.length > 0) {
+        const timeUntilFlush = CSV_FLUSH_INTERVAL - timeSinceLastFlush;
+        csvFlushTimer = setTimeout(() => {
+            csvFlushTimer = null;
+            flushCsvBuffer();
+        }, Math.max(timeUntilFlush, 1000)); // At least 1 second delay
+    }
+}
+
+function stopCsvBuffering() {
+    // Clear timer
+    if (csvFlushTimer) {
+        clearTimeout(csvFlushTimer);
+        csvFlushTimer = null;
+    }
+    
+    // Flush any remaining data
+    if (csvBuffer.length > 0) {
+        flushCsvBuffer();
+    }
+}
+
 // Socket.IO connection handling
 io.on('connection', (socket) => {
     debugLog('Client connected');
@@ -151,15 +229,10 @@ io.on('connection', (socket) => {
                     debugLog('Emitting telemetry data to clients');
                     io.emit('telemetry-data', telemetry);
                     
-                    // Log to CSV
+                    // Add to CSV buffer (buffered writing for efficiency)
                     if (csvWriter) {
-                        try {
-                            debugLog('Writing to CSV...');
-                            await csvWriter.writeRecords([telemetry]);
-                            debugLog('CSV write successful');
-                        } catch (err) {
-                            console.error('CSV write error:', err);
-                        }
+                        debugLog('Adding telemetry to CSV buffer...');
+                        addToCsvBuffer(telemetry);
                     } else {
                         debugLog('No CSV writer available');
                     }
@@ -177,6 +250,13 @@ io.on('connection', (socket) => {
     // Handle serial port disconnection
     socket.on('disconnect-serial', () => {
         if (serialPort && serialPort.isOpen) {
+            // Flush any remaining CSV data before closing
+            if (csvBuffer.length > 0) {
+                console.log('Flushing remaining CSV data before disconnection...');
+                flushCsvBuffer();
+            }
+            stopCsvBuffering();
+            
             serialPort.close(() => {
                 debugLog('Serial port closed');
                 socket.emit('serial-status', { connected: false });
@@ -225,12 +305,25 @@ io.on('connection', (socket) => {
     
     socket.on('disconnect', () => {
         console.log('Client disconnected');
+        // Flush any remaining CSV data when client disconnects
+        if (csvBuffer.length > 0) {
+            console.log('Flushing remaining CSV data due to client disconnect...');
+            flushCsvBuffer();
+        }
     });
 });
 
 // Graceful shutdown
 process.on('SIGINT', () => {
     console.log('Shutting down...');
+    
+    // Flush any remaining CSV data before shutdown
+    if (csvBuffer.length > 0) {
+        console.log('Flushing remaining CSV data before shutdown...');
+        flushCsvBuffer();
+    }
+    stopCsvBuffering();
+    
     if (serialPort && serialPort.isOpen) {
         serialPort.close();
     }

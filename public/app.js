@@ -35,7 +35,10 @@ const TELEMETRY_AVERAGE_WINDOW = 10; // Average over last 10 messages
 // GPS validity tracking
 let lastGpsValidTime = null;
 let lastGpsValidState = null;
-const GPS_INVALID_THRESHOLD = 5000; // 5 seconds in milliseconds
+const GPS_INVALID_THRESHOLD = 7000; // 7 seconds in milliseconds
+
+// CSV status tracking
+let currentCsvFilename = null;
 
 // DOM elements
 const elements = {
@@ -702,12 +705,33 @@ socket.on('serial-error', (error) => {
 
 socket.on('csv-status', (status) => {
     if (status.logging) {
-        elements.csvStatus.textContent = `Logging: ${status.filename}`;
+        currentCsvFilename = status.filename;
+        elements.csvStatus.textContent = `${status.filename}`;
         elements.csvStatus.className = 'status-value connected';
         addLogEntry(`CSV logging started: ${status.filename}`, 'info');
     } else {
+        currentCsvFilename = null;
         elements.csvStatus.textContent = 'Inactive';
         elements.csvStatus.className = 'status-value';
+    }
+});
+
+socket.on('csv-buffer-status', (bufferStatus) => {
+    // Update CSV status to include buffer information
+    if (currentCsvFilename && bufferStatus.bufferSize > 0) {
+        const bufferPercent = Math.round((bufferStatus.bufferSize / bufferStatus.maxSize) * 100);
+        elements.csvStatus.textContent = `Logging: ${currentCsvFilename} (Buffer: ${bufferStatus.bufferSize}/${bufferStatus.maxSize})`;
+        
+        // Change color based on buffer fullness
+        if (bufferPercent > 80) {
+            elements.csvStatus.className = 'status-value status-indicator warning';
+        } else {
+            elements.csvStatus.className = 'status-value connected';
+        }
+    } else if (currentCsvFilename) {
+        // Buffer is empty, show normal logging status
+        elements.csvStatus.textContent = `Logging: ${currentCsvFilename}`;
+        elements.csvStatus.className = 'status-value connected';
     }
 });
 

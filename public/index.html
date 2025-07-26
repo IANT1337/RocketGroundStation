@@ -15,21 +15,25 @@
         <header>
             <h1>Rocket Ground Station</h1>
             <div class="status-bar">
-                <div class="status-item">
-                    <span class="status-label">Serial:</span>
-                    <span id="serial-status" class="status-value disconnected">Disconnected</span>
+                <div class="status-row status-row-top">
+                    <div class="status-item">
+                        <span class="status-label">Serial:</span>
+                        <span id="serial-status" class="status-value disconnected">Disconnected</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Logging:</span>
+                        <span id="csv-status" class="status-value">Inactive</span>
+                    </div>
                 </div>
-                <div class="status-item">
-                    <span class="status-label">Logging:</span>
-                    <span id="csv-status" class="status-value">Inactive</span>
-                </div>
-                <div class="status-item">
-                    <span class="status-label">Data Points:</span>
-                    <span id="data-count" class="status-value">0</span>
-                </div>
-                <div class="status-item">
-                    <span class="status-label">Messages Received:</span>
-                    <span id="message-count" class="status-value">0</span>
+                <div class="status-row status-row-bottom">
+                    <div class="status-item">
+                        <span class="status-label">Data Points:</span>
+                        <span id="data-count" class="status-value">0</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Messages Received:</span>
+                        <span id="message-count" class="status-value">0</span>
+                    </div>
                 </div>
             </div>
         </header>
