@@ -16,6 +16,23 @@ function debugLog(...args) {
 let altitudeChart = null;
 let pressureChart = null;
 let gpsChart = null;
+let accelChart = null;
+let gyroChart = null;
+let temperatureChart = null;
+let powerChart = null;
+
+// 3D Visualization instances
+let scene = null;
+let camera = null;
+let renderer = null;
+let rocketModel = null;
+let animationId = null;
+let autoRotate = false;
+
+// Current orientation data
+let currentRoll = 0;
+let currentPitch = 0;
+let currentYaw = 0;
 
 // Data arrays for charts
 let timeLabels = [];
@@ -25,10 +42,26 @@ let pressureData = [];
 let latitudeData = [];
 let longitudeData = [];
 let rssiData = []; // RSSI data array
+// IMU data arrays
+let accelXData = [];
+let accelYData = [];
+let accelZData = [];
+let gyroXData = [];
+let gyroYData = [];
+let gyroZData = [];
+let imuTemperatureData = [];
+// Power data arrays
+let busVoltageData = [];
+let currentData = [];
+let powerData = [];
 
 // Telemetry averaging for log display
 let telemetryBuffer = [];
 let telemetryCounter = 0;
+
+// Terminal variables
+let terminalElement = null;
+let discardTelemetryPackets = true;
 const TELEMETRY_LOG_INTERVAL = 10; // Log every 10th telemetry message as average
 const TELEMETRY_AVERAGE_WINDOW = 10; // Average over last 10 messages
 
@@ -48,15 +81,12 @@ const elements = {
     disconnectBtn: document.getElementById('disconnect-btn'),
     clearDataBtn: document.getElementById('clear-data-btn'),
     refreshPortsBtn: document.getElementById('refresh-ports'),
-    exportCsvBtn: document.getElementById('export-csv'),
-    autoScrollCheckbox: document.getElementById('auto-scroll'),
     debugModeCheckbox: document.getElementById('debug-mode'),
     fullLoggingCheckbox: document.getElementById('full-logging'),
     serialStatus: document.getElementById('serial-status'),
     csvStatus: document.getElementById('csv-status'),
     dataCount: document.getElementById('data-count'),
     messageCount: document.getElementById('message-count'),
-    telemetryLog: document.getElementById('telemetry-log'),
     sleepCmd: document.getElementById('sleep-cmd'),
     maintCmd: document.getElementById('maint-cmd'),
     flightCmd: document.getElementById('flight-cmd'),
@@ -73,7 +103,22 @@ const currentDataElements = {
     altitude_pressure: document.getElementById('current-altitude-pressure'),
     pressure: document.getElementById('current-pressure'),
     gps_valid: document.getElementById('current-gps-valid'),
-    pressure_valid: document.getElementById('current-pressure-valid')
+    pressure_valid: document.getElementById('current-pressure-valid'),
+    accel_x: document.getElementById('current-accel-x'),
+    accel_y: document.getElementById('current-accel-y'),
+    accel_z: document.getElementById('current-accel-z'),
+    gyro_x: document.getElementById('current-gyro-x'),
+    gyro_y: document.getElementById('current-gyro-y'),
+    gyro_z: document.getElementById('current-gyro-z'),
+    mag_x: document.getElementById('current-mag-x'),
+    mag_y: document.getElementById('current-mag-y'),
+    mag_z: document.getElementById('current-mag-z'),
+    imu_temperature: document.getElementById('current-imu-temperature'),
+    imu_valid: document.getElementById('current-imu-valid'),
+    bus_voltage: document.getElementById('current-bus-voltage'),
+    current: document.getElementById('current-current'),
+    power: document.getElementById('current-power'),
+    power_valid: document.getElementById('current-power-valid')
 };
 
 // Initialize charts
@@ -218,6 +263,454 @@ function initializeCharts() {
             }
         }
     });
+
+    // Accelerometer Chart
+    const accelCtx = document.getElementById('accel-chart').getContext('2d');
+    accelChart = new Chart(accelCtx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Accel X (m/s²)',
+                data: [],
+                borderColor: 'rgb(255, 99, 132)',
+                backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                tension: 0.1
+            }, {
+                label: 'Accel Y (m/s²)',
+                data: [],
+                borderColor: 'rgb(54, 162, 235)',
+                backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                tension: 0.1
+            }, {
+                label: 'Accel Z (m/s²)',
+                data: [],
+                borderColor: 'rgb(75, 192, 192)',
+                backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Time'
+                    }
+                },
+                y: {
+                    title: {
+                        display: true,
+                        text: 'Acceleration (m/s²)'
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top'
+                }
+            },
+            animation: {
+                duration: 0
+            }
+        }
+    });
+
+    // Gyroscope Chart
+    const gyroCtx = document.getElementById('gyro-chart').getContext('2d');
+    gyroChart = new Chart(gyroCtx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Gyro X (°/s)',
+                data: [],
+                borderColor: 'rgb(255, 159, 64)',
+                backgroundColor: 'rgba(255, 159, 64, 0.1)',
+                tension: 0.1
+            }, {
+                label: 'Gyro Y (°/s)',
+                data: [],
+                borderColor: 'rgb(153, 102, 255)',
+                backgroundColor: 'rgba(153, 102, 255, 0.1)',
+                tension: 0.1
+            }, {
+                label: 'Gyro Z (°/s)',
+                data: [],
+                borderColor: 'rgb(255, 205, 86)',
+                backgroundColor: 'rgba(255, 205, 86, 0.1)',
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Time'
+                    }
+                },
+                y: {
+                    title: {
+                        display: true,
+                        text: 'Angular Velocity (°/s)'
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top'
+                }
+            },
+            animation: {
+                duration: 0
+            }
+        }
+    });
+
+    // Temperature Chart
+    const tempCtx = document.getElementById('temperature-chart').getContext('2d');
+    temperatureChart = new Chart(tempCtx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'IMU Temperature (°C)',
+                data: [],
+                borderColor: 'rgb(255, 99, 71)',
+                backgroundColor: 'rgba(255, 99, 71, 0.1)',
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Time'
+                    }
+                },
+                y: {
+                    title: {
+                        display: true,
+                        text: 'Temperature (°C)'
+                    }
+                }
+            },
+            animation: {
+                duration: 0
+            }
+        }
+    });
+
+    // Power Chart
+    const powerCtx = document.getElementById('power-chart').getContext('2d');
+    powerChart = new Chart(powerCtx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Bus Voltage (V)',
+                data: [],
+                borderColor: 'rgb(255, 193, 7)',
+                backgroundColor: 'rgba(255, 193, 7, 0.1)',
+                tension: 0.1
+            }, {
+                label: 'Current (mA)',
+                data: [],
+                borderColor: 'rgb(220, 53, 69)',
+                backgroundColor: 'rgba(220, 53, 69, 0.1)',
+                tension: 0.1,
+                yAxisID: 'y1'
+            }, {
+                label: 'Power (mW)',
+                data: [],
+                borderColor: 'rgb(13, 202, 240)',
+                backgroundColor: 'rgba(13, 202, 240, 0.1)',
+                tension: 0.1,
+                yAxisID: 'y1'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Time'
+                    }
+                },
+                y: {
+                    type: 'linear',
+                    display: true,
+                    position: 'left',
+                    title: {
+                        display: true,
+                        text: 'Voltage (V)'
+                    },
+                    min: 0,
+                    max: 15,
+                    ticks: {
+                        stepSize: 1
+                    }
+                },
+                y1: {
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
+                    title: {
+                        display: true,
+                        text: 'Current (mA) / Power (mW)'
+                    },
+                    min: 0,
+                    grid: {
+                        drawOnChartArea: false,
+                    },
+                }
+            },
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top'
+                }
+            },
+            animation: {
+                duration: 0
+            }
+        }
+    });
+}
+
+// Initialize 3D Rocket Visualizer
+function initialize3DVisualizer() {
+    debugLog('Initializing 3D visualizer...');
+    
+    // Check if Three.js is available
+    if (typeof THREE === 'undefined') {
+        console.error('Three.js is not loaded');
+        return;
+    }
+    
+    const container = document.getElementById('rocket-3d-viewer');
+    if (!container) {
+        console.error('3D viewer container not found');
+        return;
+    }
+    
+    // Scene setup
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x000000);
+    
+    // Camera setup
+    camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+    camera.position.set(0, 0, 5);
+    
+    // Renderer setup
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.setClearColor(0x000000);
+    container.appendChild(renderer.domElement);
+    
+    // Create rocket model (simplified cylinder with cone)
+    createRocketModel();
+    
+    // Lighting
+    const ambientLight = new THREE.AmbientLight(0x00ff00, 0.3);
+    scene.add(ambientLight);
+    
+    const directionalLight = new THREE.DirectionalLight(0x00ff00, 0.8);
+    directionalLight.position.set(1, 1, 1);
+    scene.add(directionalLight);
+    
+    // Add reference grid
+    const gridHelper = new THREE.GridHelper(10, 10, 0x00ff00, 0x004400);
+    gridHelper.rotateX(Math.PI / 2);
+    scene.add(gridHelper);
+    
+    // Add coordinate axes
+    const axesHelper = new THREE.AxesHelper(2);
+    scene.add(axesHelper);
+    
+    // Start animation loop
+    animate3D();
+    
+    // Handle window resize
+    window.addEventListener('resize', onWindowResize3D);
+    
+    // Add event listeners for controls
+    setupVisualizerControls();
+    
+    debugLog('3D visualizer initialized successfully');
+}
+
+// Create simplified rocket model
+function createRocketModel() {
+    const rocketGroup = new THREE.Group();
+    
+    // Rocket body (cylinder)
+    const bodyGeometry = new THREE.CylinderGeometry(0.3, 0.3, 3, 8);
+    const bodyMaterial = new THREE.MeshPhongMaterial({ 
+        color: 0x00ff00,
+        transparent: true,
+        opacity: 0.8,
+        wireframe: false
+    });
+    const rocketBody = new THREE.Mesh(bodyGeometry, bodyMaterial);
+    rocketGroup.add(rocketBody);
+    
+    // Nose cone
+    const noseGeometry = new THREE.ConeGeometry(0.3, 0.8, 8);
+    const noseMaterial = new THREE.MeshPhongMaterial({ 
+        color: 0x00cc00,
+        transparent: true,
+        opacity: 0.9
+    });
+    const noseCone = new THREE.Mesh(noseGeometry, noseMaterial);
+    noseCone.position.y = 1.9;
+    rocketGroup.add(noseCone);
+    
+    // Fins
+    const finGeometry = new THREE.BoxGeometry(0.1, 0.8, 0.4);
+    const finMaterial = new THREE.MeshPhongMaterial({ 
+        color: 0x008800,
+        transparent: true,
+        opacity: 0.7
+    });
+    
+    // Add 4 fins
+    for (let i = 0; i < 4; i++) {
+        const fin = new THREE.Mesh(finGeometry, finMaterial);
+        fin.position.y = -1.2;
+        fin.position.x = Math.cos(i * Math.PI / 2) * 0.35;
+        fin.position.z = Math.sin(i * Math.PI / 2) * 0.35;
+        fin.lookAt(0, -1.2, 0);
+        rocketGroup.add(fin);
+    }
+    
+    // Engine nozzle
+    const nozzleGeometry = new THREE.CylinderGeometry(0.15, 0.25, 0.4, 8);
+    const nozzleMaterial = new THREE.MeshPhongMaterial({ 
+        color: 0x006600,
+        transparent: true,
+        opacity: 0.8
+    });
+    const nozzle = new THREE.Mesh(nozzleGeometry, nozzleMaterial);
+    nozzle.position.y = -1.7;
+    rocketGroup.add(nozzle);
+    
+    // Set initial orientation (nose pointing up)
+    rocketGroup.rotation.x = 0;
+    rocketGroup.rotation.y = 0;
+    rocketGroup.rotation.z = 0;
+    
+    rocketModel = rocketGroup;
+    scene.add(rocketModel);
+}
+
+// Animation loop for 3D scene
+function animate3D() {
+    animationId = requestAnimationFrame(animate3D);
+    
+    // Auto-rotate camera if enabled
+    if (autoRotate) {
+        const time = Date.now() * 0.001;
+        camera.position.x = Math.cos(time) * 5;
+        camera.position.z = Math.sin(time) * 5;
+        camera.lookAt(0, 0, 0);
+    }
+    
+    renderer.render(scene, camera);
+}
+
+// Handle window resize
+function onWindowResize3D() {
+    const container = document.getElementById('rocket-3d-viewer');
+    if (container && camera && renderer) {
+        camera.aspect = container.clientWidth / container.clientHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(container.clientWidth, container.clientHeight);
+    }
+}
+
+// Setup visualizer controls
+function setupVisualizerControls() {
+    const resetBtn = document.getElementById('reset-orientation');
+    const autoRotateBtn = document.getElementById('auto-rotate');
+    
+    if (resetBtn) {
+        resetBtn.addEventListener('click', () => {
+            // Reset camera position
+            camera.position.set(0, 0, 5);
+            camera.lookAt(0, 0, 0);
+            
+            // Reset rocket orientation
+            if (rocketModel) {
+                rocketModel.rotation.set(0, 0, 0);
+            }
+            
+            // Reset orientation values
+            currentRoll = 0;
+            currentPitch = 0;
+            currentYaw = 0;
+            updateOrientationDisplay();
+            
+            debugLog('3D view reset');
+        });
+    }
+    
+    if (autoRotateBtn) {
+        autoRotateBtn.addEventListener('click', () => {
+            autoRotate = !autoRotate;
+            autoRotateBtn.textContent = autoRotate ? 'Stop Auto Rotate' : 'Auto Rotate';
+            autoRotateBtn.classList.toggle('active', autoRotate);
+            debugLog('Auto rotate:', autoRotate);
+        });
+    }
+}
+
+// Update rocket orientation based on IMU data
+function updateRocketOrientation(accelX, accelY, accelZ, gyroX, gyroY, gyroZ) {
+    if (!rocketModel) return;
+    
+    // Calculate roll and pitch from accelerometer data
+    // Roll (rotation around X-axis)
+    currentRoll = Math.atan2(accelY, accelZ) * (180 / Math.PI);
+    
+    // Pitch (rotation around Y-axis)
+    currentPitch = Math.atan2(-accelX, Math.sqrt(accelY * accelY + accelZ * accelZ)) * (180 / Math.PI);
+    
+    // For yaw, we would need magnetometer data or integrate gyroscope data
+    // For now, we'll use a simple integration of gyro Z
+    currentYaw += gyroZ * 0.1; // Simple integration (this would drift in real application)
+    
+    // Apply rotations to the rocket model
+    // Note: Three.js uses radians, so convert from degrees
+    rocketModel.rotation.x = currentPitch * (Math.PI / 180);
+    rocketModel.rotation.y = currentYaw * (Math.PI / 180);
+    rocketModel.rotation.z = currentRoll * (Math.PI / 180);
+    
+    // Update the orientation display
+    updateOrientationDisplay();
+}
+
+// Update orientation display values
+function updateOrientationDisplay() {
+    const rollElement = document.getElementById('current-roll');
+    const pitchElement = document.getElementById('current-pitch');
+    const yawElement = document.getElementById('current-yaw');
+    
+    if (rollElement) rollElement.textContent = `${currentRoll.toFixed(1)}°`;
+    if (pitchElement) pitchElement.textContent = `${currentPitch.toFixed(1)}°`;
+    if (yawElement) yawElement.textContent = `${currentYaw.toFixed(1)}°`;
 }
 
 // Function to determine GPS validity status with 5-second delay
@@ -295,6 +788,32 @@ function updateCurrentData(data) {
             } else if (key === 'pressure_valid') {
                 element.className = `data-value status-indicator ${value ? 'valid' : 'invalid'}`;
                 value = value ? '✓ Valid' : '✗ Invalid';
+            } else if (key.startsWith('accel_') || key.startsWith('gyro_')) {
+                // Format accelerometer and gyroscope values
+                value = typeof value === 'number' ? value.toFixed(3) : '-';
+            } else if (key.startsWith('mag_')) {
+                // Format magnetometer values
+                value = typeof value === 'number' ? value.toFixed(1) : '-';
+            } else if (key === 'imu_temperature') {
+                // Format IMU temperature
+                value = typeof value === 'number' ? `${value.toFixed(1)} °C` : '- °C';
+            } else if (key === 'imu_valid') {
+                // Format IMU validity indicator
+                element.className = `data-value status-indicator ${value ? 'valid' : 'invalid'}`;
+                value = value ? '✓ Valid' : '✗ Invalid';
+            } else if (key === 'bus_voltage') {
+                // Format bus voltage
+                value = typeof value === 'number' ? `${value.toFixed(2)} V` : '- V';
+            } else if (key === 'current') {
+                // Format current
+                value = typeof value === 'number' ? `${value.toFixed(1)} mA` : '- mA';
+            } else if (key === 'power') {
+                // Format power
+                value = typeof value === 'number' ? `${value.toFixed(0)} mW` : '- mW';
+            } else if (key === 'power_valid') {
+                // Format power validity indicator
+                element.className = `data-value status-indicator ${value ? 'valid' : 'invalid'}`;
+                value = value ? '✓ Valid' : '✗ Invalid';
             }
             
             element.textContent = value;
@@ -304,12 +823,34 @@ function updateCurrentData(data) {
     });
 }
 
+// Process INA260 power data (ESP32 already sends converted values)
+function processINA260Data(data) {
+    // ESP32 sends data in correct units: V, mA, mW
+    // No conversion needed, just log unusual values for debugging
+    if (data.bus_voltage > 20 || data.bus_voltage < 0) {
+        console.log(`Unusual voltage reading: ${data.bus_voltage}V`);
+    }
+    
+    if (Math.abs(data.current) > 5000) {
+        console.log(`High current reading: ${data.current}mA`);
+    }
+    
+    if (data.power > 50000) {
+        console.log(`High power reading: ${data.power}mW`);
+    }
+    
+    return data;
+}
+
 // Update charts with new data
 function updateCharts(data) {
     debugLog('updateCharts called with:', data);
     
+    // Process INA260 power data if needed
+    data = processINA260Data(data);
+    
     // Validate that we have the required chart instances
-    if (!altitudeChart || !pressureChart || !gpsChart) {
+    if (!altitudeChart || !pressureChart || !gpsChart || !accelChart || !gyroChart || !temperatureChart || !powerChart) {
         console.error('Chart instances not initialized');
         throw new Error('Chart instances not initialized');
     }
@@ -338,6 +879,30 @@ function updateCharts(data) {
     pressureData.push(data.pressure);
     rssiData.push(data.rssi); // Store RSSI data
     
+    // Add IMU data to arrays
+    accelXData.push(data.accel_x);
+    accelYData.push(data.accel_y);
+    accelZData.push(data.accel_z);
+    gyroXData.push(data.gyro_x);
+    gyroYData.push(data.gyro_y);
+    gyroZData.push(data.gyro_z);
+    imuTemperatureData.push(data.imu_temperature);
+    
+    // Add power data to arrays
+    busVoltageData.push(data.bus_voltage);
+    currentData.push(data.current);
+    powerData.push(data.power);
+    
+    // Debug power data values - log any power readings for monitoring
+    if (data.power_valid && (data.bus_voltage > 0 || data.current !== 0 || data.power > 0)) {
+        debugLog('Power data received:', {
+            bus_voltage: data.bus_voltage,
+            current: data.current,
+            power: data.power,
+            power_valid: data.power_valid
+        });
+    }
+    
     // Add data to chart labels and datasets
     altitudeChart.data.labels.push(timeLabel);
     altitudeChart.data.datasets[0].data.push(data.altitude_gps);
@@ -346,12 +911,42 @@ function updateCharts(data) {
     pressureChart.data.labels.push(timeLabel);
     pressureChart.data.datasets[0].data.push(data.pressure);
     
+    // Add IMU data to charts
+    accelChart.data.labels.push(timeLabel);
+    accelChart.data.datasets[0].data.push(data.accel_x);
+    accelChart.data.datasets[1].data.push(data.accel_y);
+    accelChart.data.datasets[2].data.push(data.accel_z);
+    
+    gyroChart.data.labels.push(timeLabel);
+    gyroChart.data.datasets[0].data.push(data.gyro_x);
+    gyroChart.data.datasets[1].data.push(data.gyro_y);
+    gyroChart.data.datasets[2].data.push(data.gyro_z);
+    
+    temperatureChart.data.labels.push(timeLabel);
+    temperatureChart.data.datasets[0].data.push(data.imu_temperature);
+    
+    // Add power data to charts
+    powerChart.data.labels.push(timeLabel);
+    powerChart.data.datasets[0].data.push(data.bus_voltage);
+    powerChart.data.datasets[1].data.push(data.current);
+    powerChart.data.datasets[2].data.push(data.power);
+    
     debugLog('Chart data lengths:', {
         timeLabels: timeLabels.length,
         altitudeGps: altitudeGpsData.length,
         altitudePressure: altitudePressureData.length,
         pressure: pressureData.length,
         rssi: rssiData.length,
+        accelX: accelXData.length,
+        accelY: accelYData.length,
+        accelZ: accelZData.length,
+        gyroX: gyroXData.length,
+        gyroY: gyroYData.length,
+        gyroZ: gyroZData.length,
+        imuTemp: imuTemperatureData.length,
+        busVoltage: busVoltageData.length,
+        current: currentData.length,
+        power: powerData.length,
         altitudeChart0: altitudeChart.data.datasets[0].data.length,
         altitudeChart1: altitudeChart.data.datasets[1].data.length,
         pressureChart0: pressureChart.data.datasets[0].data.length
@@ -375,12 +970,46 @@ function updateCharts(data) {
         pressureData.splice(0, pressureData.length - maxPoints);
         rssiData.splice(0, rssiData.length - maxPoints); // Clean RSSI data array
         
+        // Clean up IMU data arrays
+        accelXData.splice(0, accelXData.length - maxPoints);
+        accelYData.splice(0, accelYData.length - maxPoints);
+        accelZData.splice(0, accelZData.length - maxPoints);
+        gyroXData.splice(0, gyroXData.length - maxPoints);
+        gyroYData.splice(0, gyroYData.length - maxPoints);
+        gyroZData.splice(0, gyroZData.length - maxPoints);
+        imuTemperatureData.splice(0, imuTemperatureData.length - maxPoints);
+        
+        // Clean up power data arrays
+        busVoltageData.splice(0, busVoltageData.length - maxPoints);
+        currentData.splice(0, currentData.length - maxPoints);
+        powerData.splice(0, powerData.length - maxPoints);
+        
         // Clean up chart data as well
         altitudeChart.data.labels.splice(0, altitudeChart.data.labels.length - maxPoints);
         altitudeChart.data.datasets[0].data.splice(0, altitudeChart.data.datasets[0].data.length - maxPoints);
         altitudeChart.data.datasets[1].data.splice(0, altitudeChart.data.datasets[1].data.length - maxPoints);
         pressureChart.data.labels.splice(0, pressureChart.data.labels.length - maxPoints);
         pressureChart.data.datasets[0].data.splice(0, pressureChart.data.datasets[0].data.length - maxPoints);
+        
+        // Clean up IMU chart data
+        accelChart.data.labels.splice(0, accelChart.data.labels.length - maxPoints);
+        accelChart.data.datasets[0].data.splice(0, accelChart.data.datasets[0].data.length - maxPoints);
+        accelChart.data.datasets[1].data.splice(0, accelChart.data.datasets[1].data.length - maxPoints);
+        accelChart.data.datasets[2].data.splice(0, accelChart.data.datasets[2].data.length - maxPoints);
+        
+        gyroChart.data.labels.splice(0, gyroChart.data.labels.length - maxPoints);
+        gyroChart.data.datasets[0].data.splice(0, gyroChart.data.datasets[0].data.length - maxPoints);
+        gyroChart.data.datasets[1].data.splice(0, gyroChart.data.datasets[1].data.length - maxPoints);
+        gyroChart.data.datasets[2].data.splice(0, gyroChart.data.datasets[2].data.length - maxPoints);
+        
+        temperatureChart.data.labels.splice(0, temperatureChart.data.labels.length - maxPoints);
+        temperatureChart.data.datasets[0].data.splice(0, temperatureChart.data.datasets[0].data.length - maxPoints);
+        
+        // Clean up power chart data
+        powerChart.data.labels.splice(0, powerChart.data.labels.length - maxPoints);
+        powerChart.data.datasets[0].data.splice(0, powerChart.data.datasets[0].data.length - maxPoints);
+        powerChart.data.datasets[1].data.splice(0, powerChart.data.datasets[1].data.length - maxPoints);
+        powerChart.data.datasets[2].data.splice(0, powerChart.data.datasets[2].data.length - maxPoints);
     }
     
     // Keep only last 100 points for GPS chart as well
@@ -414,7 +1043,53 @@ function updateCharts(data) {
         throw error;
     }
     
+    // Update IMU charts
+    try {
+        accelChart.update('none');
+        debugLog('Accelerometer chart updated');
+    } catch (error) {
+        console.error('Error updating accelerometer chart:', error);
+        throw error;
+    }
+    
+    try {
+        gyroChart.update('none');
+        debugLog('Gyroscope chart updated');
+    } catch (error) {
+        console.error('Error updating gyroscope chart:', error);
+        throw error;
+    }
+    
+    try {
+        temperatureChart.update('none');
+        debugLog('Temperature chart updated');
+    } catch (error) {
+        console.error('Error updating temperature chart:', error);
+        throw error;
+    }
+    
+    // Update power chart
+    try {
+        powerChart.update('none');
+        debugLog('Power chart updated');
+    } catch (error) {
+        console.error('Error updating power chart:', error);
+        throw error;
+    }
+    
     debugLog('All charts updated successfully');
+    
+    // Update 3D rocket orientation if visualizer is initialized
+    if (rocketModel) {
+        updateRocketOrientation(
+            data.accel_x || 0,
+            data.accel_y || 0, 
+            data.accel_z || 0,
+            data.gyro_x || 0,
+            data.gyro_y || 0,
+            data.gyro_z || 0
+        );
+    }
 }
 
 // Process telemetry for averaged logging
@@ -431,7 +1106,7 @@ function processTelemetryForLogging(data) {
         };
         const modeName = modeNames[data.mode] || data.mode;
         const logMessage = `TELEM: ${modeName} | GPS: ${data.latitude?.toFixed(6)}, ${data.longitude?.toFixed(6)} | Alt: ${data.altitude_gps?.toFixed(1)}m (GPS), ${data.altitude_pressure?.toFixed(1)}m (Press) | Pressure: ${data.pressure?.toFixed(1)}Pa | Valid: GPS=${data.gps_valid ? 'Y' : 'N'}, Press=${data.pressure_valid ? 'Y' : 'N'}`;
-        addLogEntry(logMessage);
+        debugLog(logMessage);
         return;
     }
     
@@ -462,7 +1137,7 @@ function processTelemetryForLogging(data) {
         const modeName = modeNames[data.mode] || data.mode;
         
         const logMessage = `AVG TELEM (${telemetryBuffer.length} msgs): ${modeName} | GPS: ${avgData.latitude?.toFixed(6)}, ${avgData.longitude?.toFixed(6)} | Alt: ${avgData.altitude_gps?.toFixed(1)}m (GPS), ${avgData.altitude_pressure?.toFixed(1)}m (Press) | Pressure: ${avgData.pressure?.toFixed(1)}Pa | Valid: GPS=${data.gps_valid ? 'Y' : 'N'}, Press=${data.pressure_valid ? 'Y' : 'N'}`;
-        addLogEntry(logMessage);
+        debugLog(logMessage);
     }
 }
 
@@ -525,25 +1200,79 @@ function calculateTelemetryAverages() {
     return averages;
 }
 
-// Add log entry
-function addLogEntry(message, type = 'info') {
+// Terminal functions
+function addTerminalLine(message, type = 'received') {
+    if (!terminalElement) return;
+    
     const timestamp = moment().format('HH:mm:ss.SSS');
-    const logEntry = document.createElement('div');
-    logEntry.className = `log-entry ${type}`;
-    logEntry.innerHTML = `<span class="timestamp">[${timestamp}]</span>${message}`;
+    const terminalLine = document.createElement('div');
+    terminalLine.className = `terminal-line ${type}`;
     
-    elements.telemetryLog.appendChild(logEntry);
-    
-    // Auto-scroll if enabled
-    if (elements.autoScrollCheckbox.checked) {
-        elements.telemetryLog.scrollTop = elements.telemetryLog.scrollHeight;
+    if (type === 'sent') {
+        terminalLine.innerHTML = `<span class="terminal-timestamp">[${timestamp}] ></span> ${message}`;
+    } else {
+        terminalLine.innerHTML = `<span class="terminal-timestamp">[${timestamp}]</span> ${message}`;
     }
+    
+    terminalElement.appendChild(terminalLine);
+    
+    // Auto-scroll to bottom
+    terminalElement.scrollTop = terminalElement.scrollHeight;
     
     // Keep only last 1000 entries
-    const entries = elements.telemetryLog.children;
+    const entries = terminalElement.children;
     if (entries.length > 1000) {
-        elements.telemetryLog.removeChild(entries[0]);
+        terminalElement.removeChild(entries[0]);
     }
+}
+
+function clearTerminal() {
+    if (terminalElement) {
+        terminalElement.innerHTML = '<div class="terminal-line info">Terminal cleared.</div>';
+    }
+}
+
+function sendTerminalCommand() {
+    const commandInput = document.getElementById('command-input');
+    const command = commandInput.value.trim();
+    
+    if (!command) return;
+    
+    // Add command to terminal display
+    addTerminalLine(command, 'sent');
+    
+    // Send command via socket
+    socket.emit('send-raw-command', command);
+    
+    // Clear input
+    commandInput.value = '';
+}
+
+function initializeTerminal() {
+    terminalElement = document.getElementById('terminal-output');
+    const commandInput = document.getElementById('command-input');
+    const sendButton = document.getElementById('send-command');
+    const clearButton = document.getElementById('clear-terminal');
+    const discardCheckbox = document.getElementById('discard-telemetry');
+    
+    // Event listeners
+    sendButton.addEventListener('click', sendTerminalCommand);
+    clearButton.addEventListener('click', clearTerminal);
+    
+    // Enter key to send command
+    commandInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            sendTerminalCommand();
+        }
+    });
+    
+    // Discard telemetry checkbox
+    discardCheckbox.addEventListener('change', (e) => {
+        discardTelemetryPackets = e.target.checked;
+    });
+    
+    // Initialize discard setting
+    discardTelemetryPackets = discardCheckbox.checked;
 }
 
 // Load available serial ports
@@ -556,7 +1285,7 @@ function sendRocketCommand(command) {
     if (confirm(`Are you sure you want to send the ${command} command to the rocket?`)) {
         socket.emit('send-command', command);
         elements.lastCommand.textContent = command;
-        addLogEntry(`🚀 COMMAND SENT: ${command}`, 'info');
+        addTerminalLine(`🚀 COMMAND SENT: ${command}`, 'sent');
     }
 }
 
@@ -573,7 +1302,7 @@ elements.connectBtn.addEventListener('click', () => {
     }
     
     socket.emit('connect-serial', port, baudRate);
-    addLogEntry(`Attempting to connect to ${port} at ${baudRate} baud...`);
+    addTerminalLine(`Attempting to connect to ${port} at ${baudRate} baud...`, 'info');
 });
 
 elements.disconnectBtn.addEventListener('click', () => {
@@ -584,12 +1313,6 @@ elements.clearDataBtn.addEventListener('click', () => {
     if (confirm('Are you sure you want to clear all data?')) {
         socket.emit('clear-data');
     }
-});
-
-elements.exportCsvBtn.addEventListener('click', () => {
-    // Create CSV content from current data
-    const csvContent = generateCsvContent();
-    downloadCsv(csvContent, `telemetry_export_${moment().format('YYYY-MM-DD_HH-mm-ss')}.csv`);
 });
 
 // Rocket control event listeners
@@ -608,54 +1331,34 @@ elements.flightCmd.addEventListener('click', () => {
 // Debug mode controls
 elements.debugModeCheckbox.addEventListener('change', (e) => {
     DEBUG_ENABLED = e.target.checked;
-    addLogEntry(`Debug mode ${DEBUG_ENABLED ? 'enabled' : 'disabled'}`, 'info');
+    addTerminalLine(`Debug mode ${DEBUG_ENABLED ? 'enabled' : 'disabled'}`, 'info');
 });
 
 elements.fullLoggingCheckbox.addEventListener('change', (e) => {
     FULL_LOGGING_ENABLED = e.target.checked;
-    addLogEntry(`Full telemetry logging ${FULL_LOGGING_ENABLED ? 'enabled' : 'disabled'}`, 'info');
+    addTerminalLine(`Full telemetry logging ${FULL_LOGGING_ENABLED ? 'enabled' : 'disabled'}`, 'info');
 });
 
-// Generate CSV content from current chart data
-function generateCsvContent() {
-    let csv = 'Timestamp,GPS_Altitude,Pressure_Altitude,Pressure,Longitude,Latitude,RSSI\n';
+// Socket event handlers for terminal
+socket.on('raw-data', (data) => {
+    // Check if this looks like a telemetry packet and should be discarded
+    const isTelemetryPacket = data.startsWith('TELEM');
     
-    for (let i = 0; i < timeLabels.length; i++) {
-        const timestamp = timeLabels[i].format('YYYY-MM-DD HH:mm:ss');
-        const gpsAlt = altitudeGpsData[i] ? altitudeGpsData[i].y : '';
-        const pressAlt = altitudePressureData[i] ? altitudePressureData[i].y : '';
-        const pressure = pressureData[i] ? pressureData[i].y : '';
-        const rssi = rssiData[i] !== undefined ? rssiData[i] : '';
-        
-        // Find corresponding GPS data
-        let longitude = '';
-        let latitude = '';
-        const gpsPoint = gpsChart.data.datasets[0].data.find(point => 
-            Math.abs(moment(point.timestamp).diff(timeLabels[i])) < 1000
-        );
-        if (gpsPoint) {
-            longitude = gpsPoint.x;
-            latitude = gpsPoint.y;
-        }
-        
-        csv += `${timestamp},${gpsAlt},${pressAlt},${pressure},${longitude},${latitude},${rssi}\n`;
+    if (discardTelemetryPackets && isTelemetryPacket) {
+        // Don't show telemetry packets in terminal if discard is enabled
+        return;
     }
     
-    return csv;
-}
+    addTerminalLine(data, 'received');
+});
 
-// Download CSV file
-function downloadCsv(content, filename) {
-    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', filename);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-}
+socket.on('raw-command-sent', (data) => {
+    addTerminalLine(`Command sent: ${data.command}`, 'info');
+});
+
+socket.on('raw-command-error', (error) => {
+    addTerminalLine(`Command error: ${error}`, 'error');
+});
 
 // Socket event handlers
 socket.on('ports-list', (ports) => {
@@ -666,11 +1369,11 @@ socket.on('ports-list', (ports) => {
         option.textContent = `${port.path} - ${port.manufacturer || 'Unknown'}`;
         elements.portSelect.appendChild(option);
     });
-    addLogEntry(`Found ${ports.length} serial ports`);
+    addTerminalLine(`Found ${ports.length} serial ports`, 'info');
 });
 
 socket.on('ports-error', (error) => {
-    addLogEntry(`Error listing ports: ${error}`, 'error');
+    addTerminalLine(`Error listing ports: ${error}`, 'error');
 });
 
 socket.on('serial-status', (status) => {
@@ -683,7 +1386,10 @@ socket.on('serial-status', (status) => {
         elements.sleepCmd.disabled = false;
         elements.maintCmd.disabled = false;
         elements.flightCmd.disabled = false;
-        addLogEntry(`Connected to ${status.port} at ${status.baudRate} baud`, 'info');
+        // Enable terminal controls when connected
+        document.getElementById('command-input').disabled = false;
+        document.getElementById('send-command').disabled = false;
+        addTerminalLine(`Connected to ${status.port} at ${status.baudRate} baud`, 'info');
     } else {
         elements.serialStatus.textContent = 'Disconnected';
         elements.serialStatus.className = 'status-value disconnected';
@@ -693,12 +1399,15 @@ socket.on('serial-status', (status) => {
         elements.sleepCmd.disabled = true;
         elements.maintCmd.disabled = true;
         elements.flightCmd.disabled = true;
-        addLogEntry('Disconnected from serial port', 'warning');
+        // Disable terminal controls when disconnected
+        document.getElementById('command-input').disabled = true;
+        document.getElementById('send-command').disabled = true;
+        addTerminalLine('Disconnected from serial port', 'info');
     }
 });
 
 socket.on('serial-error', (error) => {
-    addLogEntry(`Serial error: ${error}`, 'error');
+    addTerminalLine(`Serial error: ${error}`, 'error');
     elements.serialStatus.textContent = 'Error';
     elements.serialStatus.className = 'status-value disconnected';
 });
@@ -708,7 +1417,7 @@ socket.on('csv-status', (status) => {
         currentCsvFilename = status.filename;
         elements.csvStatus.textContent = `${status.filename}`;
         elements.csvStatus.className = 'status-value connected';
-        addLogEntry(`CSV logging started: ${status.filename}`, 'info');
+        addTerminalLine(`CSV logging started: ${status.filename}`, 'info');
     } else {
         currentCsvFilename = null;
         elements.csvStatus.textContent = 'Inactive';
@@ -746,7 +1455,7 @@ socket.on('telemetry-data', (data) => {
         updateCurrentData(data);
     } catch (error) {
         console.error('Error updating current data:', error);
-        addLogEntry(`Error updating current data: ${error.message}`, 'error');
+        addTerminalLine(`Error updating current data: ${error.message}`, 'error');
     }
     
     try {
@@ -755,7 +1464,7 @@ socket.on('telemetry-data', (data) => {
         elements.dataCount.textContent = timeLabels.length;
     } catch (error) {
         console.error('Error updating charts:', error);
-        addLogEntry(`Error updating charts: ${error.message}`, 'error');
+        addTerminalLine(`Error updating charts: ${error.message}`, 'error');
         // Still update data count even if charts fail
         elements.dataCount.textContent = (parseInt(elements.dataCount.textContent) || 0) + 1;
     }
@@ -770,7 +1479,7 @@ socket.on('telemetry-history', (data) => {
         updateCharts(telemetry);
     });
     elements.dataCount.textContent = data.length;
-    addLogEntry(`Loaded ${data.length} historical data points`);
+    addTerminalLine(`Loaded ${data.length} historical data points`, 'info');
 });
 
 socket.on('data-cleared', () => {
@@ -814,15 +1523,15 @@ socket.on('data-cleared', () => {
     
     elements.dataCount.textContent = '0';
     elements.messageCount.textContent = '0';
-    addLogEntry('All data cleared', 'warning');
+    addTerminalLine('All data cleared', 'info');
 });
 
 socket.on('command-sent', (data) => {
-    addLogEntry(`✅ Command "${data.command}" sent successfully`, 'info');
+    addTerminalLine(`✅ Command "${data.command}" sent successfully`, 'info');
 });
 
 socket.on('command-error', (error) => {
-    addLogEntry(`❌ Command error: ${error}`, 'error');
+    addTerminalLine(`❌ Command error: ${error}`, 'error');
 });
 
 // Initialize the application
@@ -834,28 +1543,36 @@ document.addEventListener('DOMContentLoaded', () => {
         const chartAvailable = typeof Chart !== 'undefined';
         const momentAvailable = typeof moment !== 'undefined';
         const socketAvailable = typeof io !== 'undefined';
+        const threeAvailable = typeof THREE !== 'undefined';
         
         debugLog('Library status:', {
             'Chart.js': chartAvailable,
             'moment.js': momentAvailable,
-            'Socket.io': socketAvailable
+            'Socket.io': socketAvailable,
+            'Three.js': threeAvailable
         });
         
         if (!chartAvailable) {
             console.error('Chart.js is not loaded');
-            addLogEntry('❌ Chart.js failed to load', 'error');
+            // Use console.error instead of addLogEntry since terminal may not be ready yet
             return false;
         }
         
         if (!momentAvailable) {
             console.error('moment.js is not loaded');
-            addLogEntry('❌ moment.js failed to load', 'error');
+            // Use console.error instead of addLogEntry since terminal may not be ready yet
             return false;
         }
         
         if (!socketAvailable) {
             console.error('Socket.io is not loaded');
-            addLogEntry('❌ Socket.io failed to load', 'error');
+            // Use console.error instead of addLogEntry since terminal may not be ready yet
+            return false;
+        }
+        
+        if (!threeAvailable) {
+            console.error('Three.js is not loaded');
+            // Use console.error instead of addLogEntry since terminal may not be ready yet
             return false;
         }
         
@@ -871,7 +1588,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     initializeApp();
                 } else {
                     console.error('Failed to load required libraries after retry');
-                    addLogEntry('❌ Failed to load required libraries. Please refresh the page.', 'error');
                 }
             }, 1000);
         } else {
@@ -888,7 +1604,20 @@ function initializeApp() {
         debugLog('Charts initialized successfully');
     } catch (error) {
         console.error('Error initializing charts:', error);
-        addLogEntry(`❌ Error initializing charts: ${error.message}`, 'error');
+    }
+    
+    try {
+        initialize3DVisualizer();
+        debugLog('3D visualizer initialized successfully');
+    } catch (error) {
+        console.error('Error initializing 3D visualizer:', error);
+    }
+    
+    try {
+        initializeTerminal();
+        debugLog('Terminal initialized successfully');
+    } catch (error) {
+        console.error('Error initializing terminal:', error);
     }
     
     try {
@@ -896,9 +1625,9 @@ function initializeApp() {
         debugLog('Ports loading initiated');
     } catch (error) {
         console.error('Error loading ports:', error);
-        addLogEntry(`❌ Error loading ports: ${error.message}`, 'error');
     }
     
-    addLogEntry('✅ Ground Station initialized');
+    // Initialize complete - all notifications now go to terminal
+    addTerminalLine('✅ Ground Station initialized', 'info');
     debugLog('Application initialization complete');
 }

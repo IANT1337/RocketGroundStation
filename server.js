@@ -68,6 +68,21 @@ function initializeCsvWriter() {
             { id: 'pressure', title: 'Pressure (Pa)' },
             { id: 'gps_valid', title: 'GPS Valid' },
             { id: 'pressure_valid', title: 'Pressure Valid' },
+            { id: 'accel_x', title: 'Accel X (g)' },
+            { id: 'accel_y', title: 'Accel Y (g)' },
+            { id: 'accel_z', title: 'Accel Z (g)' },
+            { id: 'gyro_x', title: 'Gyro X (deg/s)' },
+            { id: 'gyro_y', title: 'Gyro Y (deg/s)' },
+            { id: 'gyro_z', title: 'Gyro Z (deg/s)' },
+            { id: 'mag_x', title: 'Mag X (µT)' },
+            { id: 'mag_y', title: 'Mag Y (µT)' },
+            { id: 'mag_z', title: 'Mag Z (µT)' },
+            { id: 'imu_temperature', title: 'IMU Temp (°C)' },
+            { id: 'imu_valid', title: 'IMU Valid' },
+            { id: 'bus_voltage', title: 'Bus Voltage (V)' },
+            { id: 'current', title: 'Current (mA)' },
+            { id: 'power', title: 'Power (mW)' },
+            { id: 'power_valid', title: 'Power Valid' },
             { id: 'rssi', title: 'RSSI (dBm)' }
         ]
     });
@@ -81,7 +96,7 @@ function parseTelemetryData(data) {
     const parts = data.trim().split(',');
     debugLog(`Parsing data: "${data.trim()}" -> ${parts.length} parts:`, parts);
     
-    if (parts.length !== 11 || parts[0] !== 'TELEM') {
+    if (parts.length !== 26 || parts[0] !== 'TELEM') {
         debugLog(`Parse failed: length=${parts.length}, first=${parts[0]}`);
         return null;
     }
@@ -96,7 +111,24 @@ function parseTelemetryData(data) {
         pressure: parseFloat(parts[7]),
         gps_valid: parts[8] === '1' || parts[8].toLowerCase() === 'true',
         pressure_valid: parts[9] === '1' || parts[9].toLowerCase() === 'true',
-        rssi: parseFloat(parts[10]) // RSSI in dBm
+        // IMU data from MPU9250
+        accel_x: parseFloat(parts[10]), // Accelerometer X (g)
+        accel_y: parseFloat(parts[11]), // Accelerometer Y (g)
+        accel_z: parseFloat(parts[12]), // Accelerometer Z (g)
+        gyro_x: parseFloat(parts[13]), // Gyroscope X (deg/s)
+        gyro_y: parseFloat(parts[14]), // Gyroscope Y (deg/s)
+        gyro_z: parseFloat(parts[15]), // Gyroscope Z (deg/s)
+        mag_x: parseFloat(parts[16]), // Magnetometer X (µT)
+        mag_y: parseFloat(parts[17]), // Magnetometer Y (µT)
+        mag_z: parseFloat(parts[18]), // Magnetometer Z (µT)
+        imu_temperature: parseFloat(parts[19]), // IMU temperature (°C)
+        imu_valid: parts[20] === '1' || parts[20].toLowerCase() === 'true', // IMU data validity
+        // Power data from INA260
+        bus_voltage: parseFloat(parts[21]), // Bus voltage (V)
+        current: parseFloat(parts[22]), // Current (mA)
+        power: parseFloat(parts[23]), // Power (mW)
+        power_valid: parts[24] === '1' || parts[24].toLowerCase() === 'true', // Power data validity
+        rssi: parseFloat(parts[25]) // RSSI in dBm (at the end)
     };
     
     debugLog('Parsed telemetry:', parsed);
@@ -211,6 +243,10 @@ io.on('connection', (socket) => {
             
             parser.on('data', async (data) => {
                 debugLog(`Raw serial data received: "${data}"`);
+                
+                // Emit raw data to all clients for terminal display
+                io.emit('raw-data', data.trim());
+                
                 const telemetry = parseTelemetryData(data);
                 if (telemetry) {
                     debugLog('Telemetry parsed successfully');
@@ -300,6 +336,28 @@ io.on('connection', (socket) => {
             }
         } else {
             socket.emit('command-error', 'Serial port not connected');
+        }
+    });
+    
+    // Send raw command to serial port (for terminal)
+    socket.on('send-raw-command', (command) => {
+        if (serialPort && serialPort.isOpen) {
+            try {
+                serialPort.write(command + '\n', (err) => {
+                    if (err) {
+                        console.error('Error sending raw command:', err);
+                        socket.emit('raw-command-error', err.message);
+                    } else {
+                        console.log(`Raw command sent: ${command}`);
+                        socket.emit('raw-command-sent', { command, timestamp: moment().toISOString() });
+                    }
+                });
+            } catch (error) {
+                console.error('Error sending raw command:', error);
+                socket.emit('raw-command-error', error.message);
+            }
+        } else {
+            socket.emit('raw-command-error', 'Serial port not connected');
         }
     });
     

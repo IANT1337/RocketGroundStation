@@ -87,45 +87,142 @@
             </div>
         </div>
 
+        <div class="terminal-panel">
+            <h3>Serial Terminal</h3>
+            <div class="terminal-controls">
+                <div class="terminal-control-group">
+                    <label>
+                        <input type="checkbox" id="discard-telemetry" checked> Hide Telemetry Packets
+                    </label>
+                    <button id="clear-terminal" class="btn btn-secondary">Clear Terminal</button>
+                </div>
+                <div class="terminal-input-group">
+                    <input type="text" id="command-input" placeholder="Enter command..." disabled>
+                    <button id="send-command" class="btn btn-primary" disabled>Send</button>
+                </div>
+            </div>
+            <div class="terminal-output" id="terminal-output">
+                <div class="terminal-line info">Terminal ready. Connect to a serial port to begin.</div>
+            </div>
+        </div>
+
         <div class="data-panel">
             <div class="current-data">
                 <h3>Current Telemetry</h3>
-                <div class="data-grid">
-                    <div class="data-item">
-                        <span class="data-label">Timestamp:</span>
-                        <span id="current-timestamp" class="data-value">-</span>
+                <div class="telemetry-tables">
+                    <!-- Status Information Table -->
+                    <div class="telemetry-table status-table">
+                        <h4>System Status</h4>
+                        <table class="data-table">
+                            <tbody>
+                                <tr>
+                                    <td class="data-label">Timestamp:</td>
+                                    <td id="current-timestamp" class="data-value">-</td>
+                                </tr>
+                                <tr>
+                                    <td class="data-label">Mode:</td>
+                                    <td id="current-mode" class="data-value">-</td>
+                                </tr>
+                                <tr>
+                                    <td class="data-label">GPS Valid:</td>
+                                    <td id="current-gps-valid" class="data-value status-indicator">-</td>
+                                </tr>
+                                <tr>
+                                    <td class="data-label">Pressure Valid:</td>
+                                    <td id="current-pressure-valid" class="data-value status-indicator">-</td>
+                                </tr>
+                                <tr>
+                                    <td class="data-label">IMU Valid:</td>
+                                    <td id="current-imu-valid" class="data-value status-indicator">-</td>
+                                </tr>
+                                <tr>
+                                    <td class="data-label">Power Valid:</td>
+                                    <td id="current-power-valid" class="data-value status-indicator">-</td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
-                    <div class="data-item">
-                        <span class="data-label">Mode:</span>
-                        <span id="current-mode" class="data-value">-</span>
-                    </div>
-                    <div class="data-item">
-                        <span class="data-label">Latitude:</span>
-                        <span id="current-latitude" class="data-value">-</span>
-                    </div>
-                    <div class="data-item">
-                        <span class="data-label">Longitude:</span>
-                        <span id="current-longitude" class="data-value">-</span>
-                    </div>
-                    <div class="data-item">
-                        <span class="data-label">GPS Altitude:</span>
-                        <span id="current-altitude-gps" class="data-value">- m</span>
-                    </div>
-                    <div class="data-item">
-                        <span class="data-label">Pressure Altitude:</span>
-                        <span id="current-altitude-pressure" class="data-value">- m</span>
-                    </div>
-                    <div class="data-item">
-                        <span class="data-label">Pressure:</span>
-                        <span id="current-pressure" class="data-value">- Pa</span>
-                    </div>
-                    <div class="data-item">
-                        <span class="data-label">GPS Valid:</span>
-                        <span id="current-gps-valid" class="data-value status-indicator">-</span>
-                    </div>
-                    <div class="data-item">
-                        <span class="data-label">Pressure Valid:</span>
-                        <span id="current-pressure-valid" class="data-value status-indicator">-</span>
+
+                    <!-- Grouped Telemetry Data Table -->
+                    <div class="telemetry-table sensor-table">
+                        <h4>Sensor Data</h4>
+                        <table class="data-table">
+                            <tbody>
+                                <!-- GPS/Position Data (Yellow hue - matches GPS chart) -->
+                                <tr class="data-group gps-group">
+                                    <td class="data-label">Latitude:</td>
+                                    <td id="current-latitude" class="data-value">-</td>
+                                </tr>
+                                <tr class="data-group gps-group">
+                                    <td class="data-label">Longitude:</td>
+                                    <td id="current-longitude" class="data-value">-</td>
+                                </tr>
+                                
+                                <!-- Altitude Data (Blue for GPS, Red for Pressure) -->
+                                <tr class="data-group altitude-gps-group">
+                                    <td class="data-label">GPS Altitude:</td>
+                                    <td id="current-altitude-gps" class="data-value">- m</td>
+                                </tr>
+                                <tr class="data-group altitude-pressure-group">
+                                    <td class="data-label">Pressure Altitude:</td>
+                                    <td id="current-altitude-pressure" class="data-value">- m</td>
+                                </tr>
+                                
+                                <!-- Pressure Data (Teal hue) -->
+                                <tr class="data-group pressure-group">
+                                    <td class="data-label">Pressure:</td>
+                                    <td id="current-pressure" class="data-value">- Pa</td>
+                                </tr>
+                                
+                                <!-- Temperature Data (Red-Orange hue) -->
+                                <tr class="data-group temperature-group">
+                                    <td class="data-label">IMU Temperature:</td>
+                                    <td id="current-imu-temperature" class="data-value">- °C</td>
+                                </tr>
+                                
+                                <!-- Accelerometer Data (Red, Blue, Teal hues) -->
+                                <tr class="data-group accel-x-group">
+                                    <td class="data-label">Accel X:</td>
+                                    <td id="current-accel-x" class="data-value">- g</td>
+                                </tr>
+                                <tr class="data-group accel-y-group">
+                                    <td class="data-label">Accel Y:</td>
+                                    <td id="current-accel-y" class="data-value">- g</td>
+                                </tr>
+                                <tr class="data-group accel-z-group">
+                                    <td class="data-label">Accel Z:</td>
+                                    <td id="current-accel-z" class="data-value">- g</td>
+                                </tr>
+                                
+                                <!-- Gyroscope Data (Orange, Purple, Yellow hues) -->
+                                <tr class="data-group gyro-x-group">
+                                    <td class="data-label">Gyro X:</td>
+                                    <td id="current-gyro-x" class="data-value">- deg/s</td>
+                                </tr>
+                                <tr class="data-group gyro-y-group">
+                                    <td class="data-label">Gyro Y:</td>
+                                    <td id="current-gyro-y" class="data-value">- deg/s</td>
+                                </tr>
+                                <tr class="data-group gyro-z-group">
+                                    <td class="data-label">Gyro Z:</td>
+                                    <td id="current-gyro-z" class="data-value">- deg/s</td>
+                                </tr>
+                                
+                                <!-- Power Data (Yellow, Red, Cyan hues) -->
+                                <tr class="data-group power-voltage-group">
+                                    <td class="data-label">Bus Voltage:</td>
+                                    <td id="current-bus-voltage" class="data-value">- V</td>
+                                </tr>
+                                <tr class="data-group power-current-group">
+                                    <td class="data-label">Current:</td>
+                                    <td id="current-current" class="data-value">- mA</td>
+                                </tr>
+                                <tr class="data-group power-power-group">
+                                    <td class="data-label">Power:</td>
+                                    <td id="current-power" class="data-value">- mW</td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
@@ -146,23 +243,63 @@
                 <h3>GPS Position</h3>
                 <canvas id="gps-chart"></canvas>
             </div>
+            
+            <div class="chart-container">
+                <h3>Accelerometer (g)</h3>
+                <canvas id="accel-chart"></canvas>
+            </div>
+            
+            <div class="chart-container">
+                <h3>Gyroscope (deg/s)</h3>
+                <canvas id="gyro-chart"></canvas>
+            </div>
+            
+            <div class="chart-container">
+                <h3>IMU Temperature (°C)</h3>
+                <canvas id="temperature-chart"></canvas>
+            </div>
+            
+            <div class="chart-container">
+                <h3>Power Data</h3>
+                <canvas id="power-chart"></canvas>
+            </div>
         </div>
 
-        <div class="log-panel">
-            <h3>Telemetry Log</h3>
-            <div class="log-controls">
-                <label>
-                    <input type="checkbox" id="auto-scroll" checked> Auto-scroll
-                </label>
-                <button id="export-csv" class="btn btn-info">Export CSV</button>
+        <div class="visualizer-section">
+            <h2>3D Rocket Orientation</h2>
+            <div class="visualizer-container">
+                <div id="rocket-3d-viewer" class="rocket-viewer"></div>
+                <div class="orientation-info">
+                    <div class="orientation-data">
+                        <h4>Current Orientation</h4>
+                        <div class="orientation-values">
+                            <div class="orientation-item">
+                                <span class="label">Roll:</span>
+                                <span id="current-roll" class="value">0.0°</span>
+                            </div>
+                            <div class="orientation-item">
+                                <span class="label">Pitch:</span>
+                                <span id="current-pitch" class="value">0.0°</span>
+                            </div>
+                            <div class="orientation-item">
+                                <span class="label">Yaw:</span>
+                                <span id="current-yaw" class="value">0.0°</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="orientation-controls">
+                        <button id="reset-orientation" class="btn btn-secondary">Reset View</button>
+                        <button id="auto-rotate" class="btn btn-secondary">Auto Rotate</button>
+                    </div>
+                </div>
             </div>
-            <div id="telemetry-log" class="log-content"></div>
         </div>
     </div>
 
     <!-- Load Chart.js and dependencies before our app script -->
     <script src="https://cdn.jsdelivr.net/npm/moment@2.29.4/moment.min.js"></script>
     <script src="/chart.js/chart.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
