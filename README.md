@@ -2,35 +2,29 @@
 
 A web-based telemetry visualization system for receiving, plotting, and logging data from RFD900x-based rocket systems via serial communication.
 
-<img width="345" height="970" alt="new" src="https://github.com/user-attachments/assets/1280123c-ef81-465a-9f24-02427c6436ea" />
-
+<img width="1548" height="1795" alt="image" src="https://github.com/user-attachments/assets/878dd9cd-e478-4802-88a5-84bdc5e3b572" />
 
 
 ## Features
 
 - **Real-time Data Reception**: Connects to RFD900x via serial COM port
-- **Live Visualization**: Interactive charts for altitude, pressure, GPS position, accelerometer, gyroscope, temperature, and power data
+- **Live Visualization**: Interactive charts for altitude, pressure, and GPS position data
 - **Data Logging**: Automatic CSV logging with timestamped files
 - **Web Interface**: Modern, responsive web dashboard accessible on local network
-- **Serial Terminal**: Interactive terminal for monitoring raw serial communication and sending custom commands
 - **Rocket Control**: Send commands (SLEEP, MAINT, FLIGHT) to the rocket via serial port
-- **3D Rocket Visualization**: Real-time 3D model showing rocket orientation based on IMU data
 - **Network Access**: Access the dashboard from any device on your local network
 - **Multiple Charts**: 
   - Altitude tracking (GPS vs Pressure-based)
   - Pressure monitoring
   - GPS position plotting
-  - Accelerometer data (X, Y, Z axes)
-  - Gyroscope data (X, Y, Z axes)
-  - IMU temperature monitoring
-  - Power consumption (voltage, current, power)
+- **Export Functionality**: Export data to CSV format
 - **Connection Management**: Easy serial port selection and configuration
 
 ## Data Format
 
 The application expects telemetry data in the following format:
 ```
-TELEM,timestamp,mode,latitude,longitude,altitude_gps,altitude_pressure,pressure,gps_valid,pressure_valid,imu_valid,power_valid,accel_x,accel_y,accel_z,gyro_x,gyro_y,gyro_z,imu_temperature,bus_voltage,current,power
+TELEM,timestamp,mode,latitude,longitude,altitude_gps,altitude_pressure,pressure,gps_valid,pressure_valid
 ```
 
 Where:
@@ -43,18 +37,10 @@ Where:
 - **pressure**: Atmospheric pressure in Pascals
 - **gps_valid**: GPS validity flag (1=valid, 0=invalid)
 - **pressure_valid**: Pressure sensor validity flag (1=valid, 0=invalid)
-- **imu_valid**: IMU sensor validity flag (1=valid, 0=invalid)
-- **power_valid**: Power sensor validity flag (1=valid, 0=invalid)
-- **accel_x, accel_y, accel_z**: Accelerometer readings in g-forces
-- **gyro_x, gyro_y, gyro_z**: Gyroscope readings in degrees per second
-- **imu_temperature**: IMU temperature in Celsius
-- **bus_voltage**: System voltage in volts
-- **current**: Current consumption in milliamps
-- **power**: Power consumption in milliwatts
 
 Example:
 ```
-TELEM,51423,2,40.712800,-74.006000,1500.5,1485.2,95432,1,1,1,1,0.05,-0.12,9.81,1.2,-0.5,0.3,25.4,12.1,850,10285
+TELEM,51423,2,40.712800,-74.006000,1500.5,1485.2,95432,1,1
 ```
 
 ## Installation
@@ -96,17 +82,10 @@ TELEM,51423,2,40.712800,-74.006000,1500.5,1485.2,95432,1,1,1,1,0.05,-0.12,9.81,1
    - Available commands: SLEEP, MAINT, FLIGHT
    - Commands are sent immediately over the serial connection
 
-5. **Use the serial terminal**:
-   - Monitor all incoming serial data in real-time
-   - Send custom commands directly to the rocket
-   - Filter telemetry packets with the "Hide Telemetry Packets" option
-   - Clear terminal history as needed
-
-6. **Monitor and analyze**:
+5. **Monitor and analyze**:
    - View real-time telemetry data and charts
-   - Use the serial terminal to monitor raw communication and send custom commands
-   - Watch the 3D rocket visualization for real-time orientation feedback
    - Data is automatically logged to CSV files in the `logs/` directory
+   - Export additional data using the Export CSV button
 
 ## Dependencies
 
@@ -115,8 +94,6 @@ TELEM,51423,2,40.712800,-74.006000,1500.5,1485.2,95432,1,1,1,1,0.05,-0.12,9.81,1
 - **serialport**: Serial port communication
 - **csv-writer**: CSV file generation
 - **moment**: Date/time handling
-- **chart.js**: Interactive charting library
-- **three.js**: 3D visualization library
 
 ## Project Structure
 
@@ -126,10 +103,9 @@ RocketGroundStation/
 ├── package.json           # Dependencies and scripts
 ├── public/                # Static web files
 │   ├── index.html        # Main web interface
-│   ├── styles.css        # Styling and theme
-│   └── app.js            # Client-side JavaScript and chart logic
+│   ├── styles.css        # Styling
+│   └── app.js            # Client-side JavaScript
 ├── logs/                 # CSV log files (auto-created)
-│   └── telemetry_*.csv   # Timestamped telemetry logs
 └── .github/
 ```
 
@@ -144,15 +120,6 @@ RocketGroundStation/
 - **CSV Logging**: Automatic timestamped CSV files
 - **File Location**: `logs/` directory
 - **Retention**: Manual cleanup (files are not automatically deleted)
-
-### Interface Layout
-The web interface is organized into the following sections:
-1. **Connection Controls**: Serial port selection, baud rate, and connection management
-2. **Rocket Control Panel**: Send operational commands to the rocket
-3. **Serial Terminal**: Real-time communication monitoring and custom command interface
-4. **Current Telemetry**: Live sensor readings and system status
-5. **Data Charts**: Multiple interactive charts for different sensor types
-6. **3D Rocket Visualization**: Real-time orientation display based on IMU data
 
 ## Development
 

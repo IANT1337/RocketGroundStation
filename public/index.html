@@ -74,19 +74,6 @@
             </div>
         </div>
 
-        <div class="rocket-control-panel">
-            <h3>Rocket Control</h3>
-            <div class="control-buttons">
-                <button id="sleep-cmd" class="btn btn-control btn-sleep" disabled>SLEEP</button>
-                <button id="maint-cmd" class="btn btn-control btn-maint" disabled>MAINT</button>
-                <button id="flight-cmd" class="btn btn-control btn-flight" disabled>FLIGHT</button>
-            </div>
-            <div class="control-status">
-                <span class="control-label">Last Command:</span>
-                <span id="last-command" class="control-value">None</span>
-            </div>
-        </div>
-
         <div class="terminal-panel">
             <h3>Serial Terminal</h3>
             <div class="terminal-controls">
@@ -103,6 +90,19 @@
             </div>
             <div class="terminal-output" id="terminal-output">
                 <div class="terminal-line info">Terminal ready. Connect to a serial port to begin.</div>
+            </div>
+        </div>
+
+        <div class="rocket-control-panel">
+            <h3>Rocket Control</h3>
+            <div class="control-buttons">
+                <button id="sleep-cmd" class="btn btn-control btn-sleep" disabled>SLEEP</button>
+                <button id="maint-cmd" class="btn btn-control btn-maint" disabled>MAINT</button>
+                <button id="flight-cmd" class="btn btn-control btn-flight" disabled>FLIGHT</button>
+            </div>
+            <div class="control-status">
+                <span class="control-label">Last Command:</span>
+                <span id="last-command" class="control-value">None</span>
             </div>
         </div>
 
@@ -293,6 +293,17 @@
                     </div>
                 </div>
             </div>
+        </div>
+
+        <div class="log-panel">
+            <h3>Telemetry Log</h3>
+            <div class="log-controls">
+                <label>
+                    <input type="checkbox" id="auto-scroll" checked> Auto-scroll
+                </label>
+                <button id="export-csv" class="btn btn-info">Export CSV</button>
+            </div>
+            <div id="telemetry-log" class="log-content"></div>
         </div>
     </div>
 

@@ -59,6 +59,12 @@ let powerData = [];
 let telemetryBuffer = [];
 let telemetryCounter = 0;
 
+// Chart update rate control
+let chartUpdateRate = 10; // Default to 10 data points
+let currentRocketMode = '-';
+let chartDataBuffer = []; // Buffer for averaging chart data
+let chartUpdateCounter = 0;
+
 // Terminal variables
 let terminalElement = null;
 let discardTelemetryPackets = true;
@@ -83,6 +89,8 @@ const elements = {
     refreshPortsBtn: document.getElementById('refresh-ports'),
     debugModeCheckbox: document.getElementById('debug-mode'),
     fullLoggingCheckbox: document.getElementById('full-logging'),
+    chartUpdateRateSelect: document.getElementById('chart-update-rate'),
+    currentModeIndicator: document.getElementById('current-mode-indicator'),
     serialStatus: document.getElementById('serial-status'),
     csvStatus: document.getElementById('csv-status'),
     dataCount: document.getElementById('data-count'),
@@ -713,6 +721,96 @@ function updateOrientationDisplay() {
     if (yawElement) yawElement.textContent = `${currentYaw.toFixed(1)}°`;
 }
 
+// Chart update rate management functions
+function updateChartUpdateRate() {
+    const newRate = parseInt(elements.chartUpdateRateSelect.value);
+    chartUpdateRate = newRate;
+    
+    // Clear the buffer when rate changes
+    chartDataBuffer = [];
+    chartUpdateCounter = 0;
+    
+    addTerminalLine(`Chart update rate changed to 1:${newRate} (${newRate === 1 ? 'real-time' : 'averaged'})`, 'info');
+    debugLog(`Chart update rate set to: ${newRate}`);
+}
+
+function setChartUpdateRateByMode(mode) {
+    let newRate;
+    const modeNames = {
+        '0': 'SLEEP',
+        '1': 'PAD', 
+        '2': 'FLIGHT',
+        '3': 'APOGEE',
+        '4': 'DESCENT',
+        '5': 'RECOVERY'
+    };
+    
+    const modeName = modeNames[mode] || mode;
+    currentRocketMode = modeName;
+    
+    // Update mode indicator
+    if (elements.currentModeIndicator) {
+        elements.currentModeIndicator.textContent = `Mode: ${modeName}`;
+    }
+    
+    // Set default rates based on mode
+    if (mode === '0' || modeName === 'SLEEP') {
+        newRate = 1; // Real-time for sleep mode
+    } else if (mode === '2' || modeName === 'FLIGHT' || mode === '1' || modeName === 'PAD') {
+        newRate = 10; // Averaged for maintenance and flight modes
+    } else {
+        newRate = 10; // Default for other modes
+    }
+    
+    // Only update if rate has changed
+    if (newRate !== chartUpdateRate) {
+        elements.chartUpdateRateSelect.value = newRate;
+        updateChartUpdateRate();
+    }
+}
+
+function averageChartData(dataArray) {
+    if (dataArray.length === 0) return {};
+    
+    const result = {};
+    const sums = {};
+    const counts = {};
+    
+    // Initialize sums and counts for all numeric fields
+    dataArray.forEach(data => {
+        Object.keys(data).forEach(key => {
+            if (typeof data[key] === 'number' && !isNaN(data[key])) {
+                if (!sums[key]) {
+                    sums[key] = 0;
+                    counts[key] = 0;
+                }
+                sums[key] += data[key];
+                counts[key]++;
+            }
+        });
+    });
+    
+    // Calculate averages
+    Object.keys(sums).forEach(key => {
+        if (counts[key] > 0) {
+            result[key] = sums[key] / counts[key];
+        }
+    });
+    
+    // Use the most recent values for non-numeric fields
+    const lastData = dataArray[dataArray.length - 1];
+    Object.keys(lastData).forEach(key => {
+        if (typeof lastData[key] !== 'number' || isNaN(lastData[key])) {
+            result[key] = lastData[key];
+        }
+    });
+    
+    // Use the most recent timestamp
+    result.server_timestamp = lastData.server_timestamp;
+    
+    return result;
+}
+
 // Function to determine GPS validity status with 5-second delay
 function getGpsValidityStatus(currentGpsValid) {
     const currentTime = Date.now();
@@ -764,7 +862,7 @@ function updateCurrentData(data) {
                     value = value || '-';
                 }
             } else if (key === 'mode') {
-                // Handle numeric mode values
+                // Handle numeric mode values and automatically update chart rate
                 const modeNames = {
                     '0': 'SLEEP',
                     '1': 'FLIGHT',
@@ -773,6 +871,12 @@ function updateCurrentData(data) {
                     '4': 'DESCENT',
                     '5': 'RECOVERY'
                 };
+                
+                // Check if mode has changed and update chart rate accordingly
+                if (value !== undefined && value !== null && String(value) !== currentRocketMode) {
+                    setChartUpdateRateByMode(String(value));
+                }
+                
                 value = modeNames[value] || value || '-';
             } else if (key === 'latitude' || key === 'longitude') {
                 value = typeof value === 'number' ? value.toFixed(6) : '-';
@@ -869,217 +973,221 @@ function updateCharts(data) {
     
     debugLog('Timestamp:', timestamp.format());
     
-    // Create a simple time label for the x-axis
-    const timeLabel = timestamp.format('HH:mm:ss');
+    // Add data to buffer for averaging
+    chartDataBuffer.push(data);
+    chartUpdateCounter++;
     
-    // Add new data point to our arrays
-    timeLabels.push(timeLabel);
-    altitudeGpsData.push(data.altitude_gps);
-    altitudePressureData.push(data.altitude_pressure);
-    pressureData.push(data.pressure);
-    rssiData.push(data.rssi); // Store RSSI data
-    
-    // Add IMU data to arrays
-    accelXData.push(data.accel_x);
-    accelYData.push(data.accel_y);
-    accelZData.push(data.accel_z);
-    gyroXData.push(data.gyro_x);
-    gyroYData.push(data.gyro_y);
-    gyroZData.push(data.gyro_z);
-    imuTemperatureData.push(data.imu_temperature);
-    
-    // Add power data to arrays
-    busVoltageData.push(data.bus_voltage);
-    currentData.push(data.current);
-    powerData.push(data.power);
-    
-    // Debug power data values - log any power readings for monitoring
-    if (data.power_valid && (data.bus_voltage > 0 || data.current !== 0 || data.power > 0)) {
-        debugLog('Power data received:', {
-            bus_voltage: data.bus_voltage,
-            current: data.current,
-            power: data.power,
-            power_valid: data.power_valid
-        });
-    }
-    
-    // Add data to chart labels and datasets
-    altitudeChart.data.labels.push(timeLabel);
-    altitudeChart.data.datasets[0].data.push(data.altitude_gps);
-    altitudeChart.data.datasets[1].data.push(data.altitude_pressure);
-    
-    pressureChart.data.labels.push(timeLabel);
-    pressureChart.data.datasets[0].data.push(data.pressure);
-    
-    // Add IMU data to charts
-    accelChart.data.labels.push(timeLabel);
-    accelChart.data.datasets[0].data.push(data.accel_x);
-    accelChart.data.datasets[1].data.push(data.accel_y);
-    accelChart.data.datasets[2].data.push(data.accel_z);
-    
-    gyroChart.data.labels.push(timeLabel);
-    gyroChart.data.datasets[0].data.push(data.gyro_x);
-    gyroChart.data.datasets[1].data.push(data.gyro_y);
-    gyroChart.data.datasets[2].data.push(data.gyro_z);
-    
-    temperatureChart.data.labels.push(timeLabel);
-    temperatureChart.data.datasets[0].data.push(data.imu_temperature);
-    
-    // Add power data to charts
-    powerChart.data.labels.push(timeLabel);
-    powerChart.data.datasets[0].data.push(data.bus_voltage);
-    powerChart.data.datasets[1].data.push(data.current);
-    powerChart.data.datasets[2].data.push(data.power);
-    
-    debugLog('Chart data lengths:', {
-        timeLabels: timeLabels.length,
-        altitudeGps: altitudeGpsData.length,
-        altitudePressure: altitudePressureData.length,
-        pressure: pressureData.length,
-        rssi: rssiData.length,
-        accelX: accelXData.length,
-        accelY: accelYData.length,
-        accelZ: accelZData.length,
-        gyroX: gyroXData.length,
-        gyroY: gyroYData.length,
-        gyroZ: gyroZData.length,
-        imuTemp: imuTemperatureData.length,
-        busVoltage: busVoltageData.length,
-        current: currentData.length,
-        power: powerData.length,
-        altitudeChart0: altitudeChart.data.datasets[0].data.length,
-        altitudeChart1: altitudeChart.data.datasets[1].data.length,
-        pressureChart0: pressureChart.data.datasets[0].data.length
-    });
-    
-    // Update GPS chart if coordinates are valid
+    // Always update GPS chart immediately (not affected by update rate)
     if (data.gps_valid && data.latitude && data.longitude) {
         gpsChart.data.datasets[0].data.push({
             x: data.longitude,
             y: data.latitude
         });
-        debugLog('Added GPS point:', data.longitude, data.latitude);
-    }
-    
-    // Keep only last 100 points for time-series charts
-    const maxPoints = 100;
-    if (timeLabels.length > maxPoints) {
-        timeLabels.splice(0, timeLabels.length - maxPoints);
-        altitudeGpsData.splice(0, altitudeGpsData.length - maxPoints);
-        altitudePressureData.splice(0, altitudePressureData.length - maxPoints);
-        pressureData.splice(0, pressureData.length - maxPoints);
-        rssiData.splice(0, rssiData.length - maxPoints); // Clean RSSI data array
         
-        // Clean up IMU data arrays
-        accelXData.splice(0, accelXData.length - maxPoints);
-        accelYData.splice(0, accelYData.length - maxPoints);
-        accelZData.splice(0, accelZData.length - maxPoints);
-        gyroXData.splice(0, gyroXData.length - maxPoints);
-        gyroYData.splice(0, gyroYData.length - maxPoints);
-        gyroZData.splice(0, gyroZData.length - maxPoints);
-        imuTemperatureData.splice(0, imuTemperatureData.length - maxPoints);
+        // Keep only last 100 GPS points
+        if (gpsChart.data.datasets[0].data.length > 100) {
+            gpsChart.data.datasets[0].data.splice(0, gpsChart.data.datasets[0].data.length - 100);
+        }
         
-        // Clean up power data arrays
-        busVoltageData.splice(0, busVoltageData.length - maxPoints);
-        currentData.splice(0, currentData.length - maxPoints);
-        powerData.splice(0, powerData.length - maxPoints);
-        
-        // Clean up chart data as well
-        altitudeChart.data.labels.splice(0, altitudeChart.data.labels.length - maxPoints);
-        altitudeChart.data.datasets[0].data.splice(0, altitudeChart.data.datasets[0].data.length - maxPoints);
-        altitudeChart.data.datasets[1].data.splice(0, altitudeChart.data.datasets[1].data.length - maxPoints);
-        pressureChart.data.labels.splice(0, pressureChart.data.labels.length - maxPoints);
-        pressureChart.data.datasets[0].data.splice(0, pressureChart.data.datasets[0].data.length - maxPoints);
-        
-        // Clean up IMU chart data
-        accelChart.data.labels.splice(0, accelChart.data.labels.length - maxPoints);
-        accelChart.data.datasets[0].data.splice(0, accelChart.data.datasets[0].data.length - maxPoints);
-        accelChart.data.datasets[1].data.splice(0, accelChart.data.datasets[1].data.length - maxPoints);
-        accelChart.data.datasets[2].data.splice(0, accelChart.data.datasets[2].data.length - maxPoints);
-        
-        gyroChart.data.labels.splice(0, gyroChart.data.labels.length - maxPoints);
-        gyroChart.data.datasets[0].data.splice(0, gyroChart.data.datasets[0].data.length - maxPoints);
-        gyroChart.data.datasets[1].data.splice(0, gyroChart.data.datasets[1].data.length - maxPoints);
-        gyroChart.data.datasets[2].data.splice(0, gyroChart.data.datasets[2].data.length - maxPoints);
-        
-        temperatureChart.data.labels.splice(0, temperatureChart.data.labels.length - maxPoints);
-        temperatureChart.data.datasets[0].data.splice(0, temperatureChart.data.datasets[0].data.length - maxPoints);
-        
-        // Clean up power chart data
-        powerChart.data.labels.splice(0, powerChart.data.labels.length - maxPoints);
-        powerChart.data.datasets[0].data.splice(0, powerChart.data.datasets[0].data.length - maxPoints);
-        powerChart.data.datasets[1].data.splice(0, powerChart.data.datasets[1].data.length - maxPoints);
-        powerChart.data.datasets[2].data.splice(0, powerChart.data.datasets[2].data.length - maxPoints);
-    }
-    
-    // Keep only last 100 points for GPS chart as well
-    if (gpsChart.data.datasets[0].data.length > maxPoints) {
-        gpsChart.data.datasets[0].data.splice(0, gpsChart.data.datasets[0].data.length - maxPoints);
-    }
-    
-    // Update charts
-    debugLog('Updating charts...');
-    try {
-        altitudeChart.update('none');
-        debugLog('Altitude chart updated');
-    } catch (error) {
-        console.error('Error updating altitude chart:', error);
-        throw error;
-    }
-    
-    try {
-        pressureChart.update('none');
-        debugLog('Pressure chart updated');
-    } catch (error) {
-        console.error('Error updating pressure chart:', error);
-        throw error;
-    }
-    
-    try {
         gpsChart.update('none');
         debugLog('GPS chart updated');
-    } catch (error) {
-        console.error('Error updating GPS chart:', error);
-        throw error;
     }
     
-    // Update IMU charts
-    try {
-        accelChart.update('none');
-        debugLog('Accelerometer chart updated');
-    } catch (error) {
-        console.error('Error updating accelerometer chart:', error);
-        throw error;
+    // Check if we should update the time-series charts
+    if (chartUpdateCounter >= chartUpdateRate) {
+        // Process the buffered data
+        let processedData;
+        
+        if (chartUpdateRate === 1) {
+            // Real-time mode - use the latest data point
+            processedData = data;
+        } else {
+            // Averaging mode - average the buffered data
+            processedData = averageChartData(chartDataBuffer);
+        }
+        
+        // Create a simple time label for the x-axis
+        const timeLabel = moment(processedData.server_timestamp).format('HH:mm:ss');
+        
+        // Add new data point to our arrays
+        timeLabels.push(timeLabel);
+        altitudeGpsData.push(processedData.altitude_gps);
+        altitudePressureData.push(processedData.altitude_pressure);
+        pressureData.push(processedData.pressure);
+        rssiData.push(processedData.rssi);
+        
+        // Add IMU data to arrays
+        accelXData.push(processedData.accel_x);
+        accelYData.push(processedData.accel_y);
+        accelZData.push(processedData.accel_z);
+        gyroXData.push(processedData.gyro_x);
+        gyroYData.push(processedData.gyro_y);
+        gyroZData.push(processedData.gyro_z);
+        imuTemperatureData.push(processedData.imu_temperature);
+        
+        // Add power data to arrays
+        busVoltageData.push(processedData.bus_voltage);
+        currentData.push(processedData.current);
+        powerData.push(processedData.power);
+        
+        // Debug power data values
+        if (processedData.power_valid && (processedData.bus_voltage > 0 || processedData.current !== 0 || processedData.power > 0)) {
+            debugLog('Power data processed:', {
+                bus_voltage: processedData.bus_voltage,
+                current: processedData.current,
+                power: processedData.power,
+                power_valid: processedData.power_valid,
+                averaged_from: chartDataBuffer.length + ' points'
+            });
+        }
+        
+        // Add data to chart labels and datasets
+        altitudeChart.data.labels.push(timeLabel);
+        altitudeChart.data.datasets[0].data.push(processedData.altitude_gps);
+        altitudeChart.data.datasets[1].data.push(processedData.altitude_pressure);
+        
+        pressureChart.data.labels.push(timeLabel);
+        pressureChart.data.datasets[0].data.push(processedData.pressure);
+        
+        // Add IMU data to charts
+        accelChart.data.labels.push(timeLabel);
+        accelChart.data.datasets[0].data.push(processedData.accel_x);
+        accelChart.data.datasets[1].data.push(processedData.accel_y);
+        accelChart.data.datasets[2].data.push(processedData.accel_z);
+        
+        gyroChart.data.labels.push(timeLabel);
+        gyroChart.data.datasets[0].data.push(processedData.gyro_x);
+        gyroChart.data.datasets[1].data.push(processedData.gyro_y);
+        gyroChart.data.datasets[2].data.push(processedData.gyro_z);
+        
+        temperatureChart.data.labels.push(timeLabel);
+        temperatureChart.data.datasets[0].data.push(processedData.imu_temperature);
+        
+        // Add power data to charts
+        powerChart.data.labels.push(timeLabel);
+        powerChart.data.datasets[0].data.push(processedData.bus_voltage);
+        powerChart.data.datasets[1].data.push(processedData.current);
+        powerChart.data.datasets[2].data.push(processedData.power);
+        
+        debugLog('Chart data lengths:', {
+            timeLabels: timeLabels.length,
+            chartUpdateRate: chartUpdateRate,
+            bufferSize: chartDataBuffer.length
+        });
+        
+        // Keep only last 100 points for time-series charts
+        const maxPoints = 100;
+        if (timeLabels.length > maxPoints) {
+            const pointsToRemove = timeLabels.length - maxPoints;
+            
+            timeLabels.splice(0, pointsToRemove);
+            altitudeGpsData.splice(0, pointsToRemove);
+            altitudePressureData.splice(0, pointsToRemove);
+            pressureData.splice(0, pointsToRemove);
+            rssiData.splice(0, pointsToRemove);
+            
+            // Clean up IMU data arrays
+            accelXData.splice(0, pointsToRemove);
+            accelYData.splice(0, pointsToRemove);
+            accelZData.splice(0, pointsToRemove);
+            gyroXData.splice(0, pointsToRemove);
+            gyroYData.splice(0, pointsToRemove);
+            gyroZData.splice(0, pointsToRemove);
+            imuTemperatureData.splice(0, pointsToRemove);
+            
+            // Clean up power data arrays
+            busVoltageData.splice(0, pointsToRemove);
+            currentData.splice(0, pointsToRemove);
+            powerData.splice(0, pointsToRemove);
+            
+            // Clean up chart data as well
+            altitudeChart.data.labels.splice(0, pointsToRemove);
+            altitudeChart.data.datasets[0].data.splice(0, pointsToRemove);
+            altitudeChart.data.datasets[1].data.splice(0, pointsToRemove);
+            pressureChart.data.labels.splice(0, pointsToRemove);
+            pressureChart.data.datasets[0].data.splice(0, pointsToRemove);
+            
+            // Clean up IMU chart data
+            accelChart.data.labels.splice(0, pointsToRemove);
+            accelChart.data.datasets[0].data.splice(0, pointsToRemove);
+            accelChart.data.datasets[1].data.splice(0, pointsToRemove);
+            accelChart.data.datasets[2].data.splice(0, pointsToRemove);
+            
+            gyroChart.data.labels.splice(0, pointsToRemove);
+            gyroChart.data.datasets[0].data.splice(0, pointsToRemove);
+            gyroChart.data.datasets[1].data.splice(0, pointsToRemove);
+            gyroChart.data.datasets[2].data.splice(0, pointsToRemove);
+            
+            temperatureChart.data.labels.splice(0, pointsToRemove);
+            temperatureChart.data.datasets[0].data.splice(0, pointsToRemove);
+            
+            // Clean up power chart data
+            powerChart.data.labels.splice(0, pointsToRemove);
+            powerChart.data.datasets[0].data.splice(0, pointsToRemove);
+            powerChart.data.datasets[1].data.splice(0, pointsToRemove);
+            powerChart.data.datasets[2].data.splice(0, pointsToRemove);
+        }
+        
+        // Update charts
+        debugLog('Updating charts...');
+        try {
+            altitudeChart.update('none');
+            debugLog('Altitude chart updated');
+        } catch (error) {
+            console.error('Error updating altitude chart:', error);
+            throw error;
+        }
+        
+        try {
+            pressureChart.update('none');
+            debugLog('Pressure chart updated');
+        } catch (error) {
+            console.error('Error updating pressure chart:', error);
+            throw error;
+        }
+        
+        // Update IMU charts
+        try {
+            accelChart.update('none');
+            debugLog('Accelerometer chart updated');
+        } catch (error) {
+            console.error('Error updating accelerometer chart:', error);
+            throw error;
+        }
+        
+        try {
+            gyroChart.update('none');
+            debugLog('Gyroscope chart updated');
+        } catch (error) {
+            console.error('Error updating gyroscope chart:', error);
+            throw error;
+        }
+        
+        try {
+            temperatureChart.update('none');
+            debugLog('Temperature chart updated');
+        } catch (error) {
+            console.error('Error updating temperature chart:', error);
+            throw error;
+        }
+        
+        // Update power chart
+        try {
+            powerChart.update('none');
+            debugLog('Power chart updated');
+        } catch (error) {
+            console.error('Error updating power chart:', error);
+            throw error;
+        }
+        
+        debugLog('All time-series charts updated successfully');
+        
+        // Clear the buffer and reset counter
+        chartDataBuffer = [];
+        chartUpdateCounter = 0;
     }
     
-    try {
-        gyroChart.update('none');
-        debugLog('Gyroscope chart updated');
-    } catch (error) {
-        console.error('Error updating gyroscope chart:', error);
-        throw error;
-    }
-    
-    try {
-        temperatureChart.update('none');
-        debugLog('Temperature chart updated');
-    } catch (error) {
-        console.error('Error updating temperature chart:', error);
-        throw error;
-    }
-    
-    // Update power chart
-    try {
-        powerChart.update('none');
-        debugLog('Power chart updated');
-    } catch (error) {
-        console.error('Error updating power chart:', error);
-        throw error;
-    }
-    
-    debugLog('All charts updated successfully');
-    
-    // Update 3D rocket orientation if visualizer is initialized
+    // Update 3D rocket orientation if visualizer is initialized (always real-time)
     if (rocketModel) {
         updateRocketOrientation(
             data.accel_x || 0,
@@ -1338,6 +1446,9 @@ elements.fullLoggingCheckbox.addEventListener('change', (e) => {
     FULL_LOGGING_ENABLED = e.target.checked;
     addTerminalLine(`Full telemetry logging ${FULL_LOGGING_ENABLED ? 'enabled' : 'disabled'}`, 'info');
 });
+
+// Chart update rate control
+elements.chartUpdateRateSelect.addEventListener('change', updateChartUpdateRate);
 
 // Socket event handlers for terminal
 socket.on('raw-data', (data) => {
@@ -1625,6 +1736,14 @@ function initializeApp() {
         debugLog('Ports loading initiated');
     } catch (error) {
         console.error('Error loading ports:', error);
+    }
+    
+    // Initialize chart update rate
+    try {
+        updateChartUpdateRate();
+        debugLog('Chart update rate initialized');
+    } catch (error) {
+        console.error('Error initializing chart update rate:', error);
     }
     
     // Initialize complete - all notifications now go to terminal

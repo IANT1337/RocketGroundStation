@@ -602,6 +602,132 @@ select:focus, input:focus {
     filter: drop-shadow(0 0 10px rgba(0, 255, 0, 0.3));
 }
 
+.log-panel {
+    background: #000000;
+    border: 2px solid #00ff00;
+    padding: 25px;
+    border-radius: 0;
+    box-shadow: 
+        0 0 10px rgba(0, 255, 0, 0.3),
+        inset 0 0 20px rgba(0, 255, 0, 0.05);
+}
+
+.log-panel h3 {
+    margin-bottom: 20px;
+    color: #00ff00;
+    border-bottom: 2px solid #00ff00;
+    padding-bottom: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    font-size: 1.2em;
+    text-shadow: 
+        0 0 5px #00ff00,
+        0 0 10px #00ff00;
+}
+
+.log-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding: 15px;
+    background: #001100;
+    border: 1px solid #00ff00;
+    border-radius: 0;
+    box-shadow: 
+        0 0 10px rgba(0, 255, 0, 0.2),
+        inset 0 0 10px rgba(0, 255, 0, 0.05);
+}
+
+.log-controls label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    color: #00ff00;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 0.9em;
+    letter-spacing: 1px;
+    text-shadow: 0 0 3px rgba(0, 255, 0, 0.3);
+}
+
+.log-content {
+    height: 300px;
+    overflow-y: auto;
+    border: 2px solid #00ff00;
+    border-radius: 0;
+    padding: 20px;
+    background: #000000;
+    color: #00ff00;
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    text-shadow: 0 0 2px rgba(0, 255, 0, 0.4);
+    box-shadow: 
+        0 0 15px rgba(0, 255, 0, 0.3),
+        inset 0 0 15px rgba(0, 255, 0, 0.1);
+}
+
+.log-content::-webkit-scrollbar {
+    width: 12px;
+}
+
+.log-content::-webkit-scrollbar-track {
+    background: #000000;
+    border: 1px solid #00ff00;
+}
+
+.log-content::-webkit-scrollbar-thumb {
+    background: #00ff00;
+    border-radius: 0;
+    box-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
+}
+
+.log-content::-webkit-scrollbar-thumb:hover {
+    background: #00aa00;
+}
+
+.log-entry {
+    margin-bottom: 6px;
+    padding: 4px 0;
+    border-bottom: 1px solid #002200;
+}
+
+.log-entry:hover {
+    background: rgba(0, 255, 0, 0.05);
+    text-shadow: 0 0 3px rgba(0, 255, 0, 0.6);
+}
+
+.log-entry.error {
+    color: #ff0000;
+    text-shadow: 0 0 3px rgba(255, 0, 0, 0.4);
+    border-left: 3px solid #ff0000;
+    padding-left: 10px;
+}
+
+.log-entry.warning {
+    color: #ffaa00;
+    text-shadow: 0 0 3px rgba(255, 170, 0, 0.4);
+    border-left: 3px solid #ffaa00;
+    padding-left: 10px;
+}
+
+.log-entry.info {
+    color: #0088ff;
+    text-shadow: 0 0 3px rgba(0, 136, 255, 0.4);
+    border-left: 3px solid #0088ff;
+    padding-left: 10px;
+}
+
+.timestamp {
+    color: #00aa00;
+    margin-right: 15px;
+    font-weight: 700;
+    text-shadow: 0 0 2px rgba(0, 255, 0, 0.3);
+}
+
 #refresh-ports {
     background: #000000;
     color: #00ff00;
