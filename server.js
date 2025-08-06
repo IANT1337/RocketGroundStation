@@ -208,6 +208,7 @@ function stopCsvBuffering() {
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {
+    console.log('✅ Client connected - Socket ID:', socket.id);
     debugLog('Client connected');
     
     // Send current data to new client
@@ -302,11 +303,13 @@ io.on('connection', (socket) => {
     
     // Get available serial ports
     socket.on('get-ports', async () => {
+        console.log('📡 Client requested serial ports list');
         try {
             const ports = await SerialPort.list();
+            console.log(`📡 Found ${ports.length} serial ports:`, ports.map(p => `${p.path} (${p.manufacturer || 'Unknown'})`));
             socket.emit('ports-list', ports);
         } catch (error) {
-            console.error('Error listing ports:', error);
+            console.error('❌ Error listing ports:', error);
             socket.emit('ports-error', error.message);
         }
     });
@@ -362,7 +365,7 @@ io.on('connection', (socket) => {
     });
     
     socket.on('disconnect', () => {
-        console.log('Client disconnected');
+        console.log('❌ Client disconnected - Socket ID:', socket.id);
         // Flush any remaining CSV data when client disconnects
         if (csvBuffer.length > 0) {
             console.log('Flushing remaining CSV data due to client disconnect...');

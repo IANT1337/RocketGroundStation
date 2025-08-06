@@ -1,6 +1,24 @@
 // Initialize socket connection
 const socket = io();
 
+// Socket connection event handlers
+socket.on('connect', () => {
+    console.log('Socket.IO connected successfully');
+    // Load ports when connection is established
+    setTimeout(() => {
+        console.log('Loading ports after connection...');
+        loadPorts();
+    }, 500); // Small delay to ensure server is ready
+});
+
+socket.on('disconnect', () => {
+    console.log('Socket.IO disconnected');
+});
+
+socket.on('connect_error', (error) => {
+    console.error('Socket.IO connection error:', error);
+});
+
 // Debug configuration
 let DEBUG_ENABLED = false; // Set to true to enable debug console logs
 let FULL_LOGGING_ENABLED = false; // Set to true to log every telemetry message
@@ -89,8 +107,8 @@ const elements = {
     refreshPortsBtn: document.getElementById('refresh-ports'),
     debugModeCheckbox: document.getElementById('debug-mode'),
     fullLoggingCheckbox: document.getElementById('full-logging'),
-    chartUpdateRateSelect: document.getElementById('chart-update-rate'),
-    currentModeIndicator: document.getElementById('current-mode-indicator'),
+    chartUpdateRateSelect: document.getElementById('chart-update-rate'), // May not exist
+    currentModeIndicator: document.getElementById('current-mode-indicator'), // May not exist
     serialStatus: document.getElementById('serial-status'),
     csvStatus: document.getElementById('csv-status'),
     dataCount: document.getElementById('data-count'),
@@ -100,6 +118,16 @@ const elements = {
     flightCmd: document.getElementById('flight-cmd'),
     lastCommand: document.getElementById('last-command')
 };
+
+// Validate DOM elements
+console.log('DOM Elements validation:');
+Object.keys(elements).forEach(key => {
+    if (!elements[key]) {
+        console.error(`❌ Element '${key}' not found!`);
+    } else {
+        console.log(`✅ Element '${key}' found`);
+    }
+});
 
 // Current data elements mapping
 const currentDataElements = {
@@ -118,9 +146,10 @@ const currentDataElements = {
     gyro_x: document.getElementById('current-gyro-x'),
     gyro_y: document.getElementById('current-gyro-y'),
     gyro_z: document.getElementById('current-gyro-z'),
-    mag_x: document.getElementById('current-mag-x'),
-    mag_y: document.getElementById('current-mag-y'),
-    mag_z: document.getElementById('current-mag-z'),
+    // Note: Magnetometer elements don't exist in HTML, removed to prevent errors
+    // mag_x: document.getElementById('current-mag-x'),
+    // mag_y: document.getElementById('current-mag-y'), 
+    // mag_z: document.getElementById('current-mag-z'),
     imu_temperature: document.getElementById('current-imu-temperature'),
     imu_valid: document.getElementById('current-imu-valid'),
     bus_voltage: document.getElementById('current-bus-voltage'),
@@ -723,6 +752,10 @@ function updateOrientationDisplay() {
 
 // Chart update rate management functions
 function updateChartUpdateRate() {
+    if (!elements.chartUpdateRateSelect) {
+        console.log('Chart update rate select not available, using default rate');
+        return;
+    }
     const newRate = parseInt(elements.chartUpdateRateSelect.value);
     chartUpdateRate = newRate;
     
@@ -841,7 +874,12 @@ function getGpsValidityStatus(currentGpsValid) {
 function updateCurrentData(data) {
     Object.keys(currentDataElements).forEach(key => {
         const element = currentDataElements[key];
-        if (element) {
+        if (!element) {
+            // Skip if element doesn't exist - no error
+            return;
+        }
+        
+        try {
             let value = data[key];
             
             // Format values
@@ -895,9 +933,6 @@ function updateCurrentData(data) {
             } else if (key.startsWith('accel_') || key.startsWith('gyro_')) {
                 // Format accelerometer and gyroscope values
                 value = typeof value === 'number' ? value.toFixed(3) : '-';
-            } else if (key.startsWith('mag_')) {
-                // Format magnetometer values
-                value = typeof value === 'number' ? value.toFixed(1) : '-';
             } else if (key === 'imu_temperature') {
                 // Format IMU temperature
                 value = typeof value === 'number' ? `${value.toFixed(1)} °C` : '- °C';
@@ -923,6 +958,11 @@ function updateCurrentData(data) {
             element.textContent = value;
             
             // Remove the flash animation - no more visual disruption
+            
+            element.textContent = value;
+        } catch (error) {
+            console.warn(`Error updating element '${key}':`, error);
+            // Continue with other elements
         }
     });
 }
@@ -1385,6 +1425,7 @@ function initializeTerminal() {
 
 // Load available serial ports
 function loadPorts() {
+    console.log('loadPorts() called - emitting get-ports event');
     socket.emit('get-ports');
 }
 
@@ -1399,6 +1440,15 @@ function sendRocketCommand(command) {
 
 // Event Listeners
 elements.refreshPortsBtn.addEventListener('click', loadPorts);
+
+// Add test button event listener
+document.getElementById('test-ports').addEventListener('click', () => {
+    console.log('=== PORT TEST CLICKED ===');
+    console.log('Socket connected:', socket.connected);
+    console.log('Port select element:', elements.portSelect);
+    console.log('Current dropdown content:', elements.portSelect ? elements.portSelect.innerHTML : 'N/A');
+    loadPorts();
+});
 
 elements.connectBtn.addEventListener('click', () => {
     const port = elements.portSelect.value;
@@ -1448,7 +1498,10 @@ elements.fullLoggingCheckbox.addEventListener('change', (e) => {
 });
 
 // Chart update rate control
-elements.chartUpdateRateSelect.addEventListener('change', updateChartUpdateRate);
+// Event listener for chart update rate (only if element exists)
+if (elements.chartUpdateRateSelect) {
+    elements.chartUpdateRateSelect.addEventListener('change', updateChartUpdateRate);
+}
 
 // Socket event handlers for terminal
 socket.on('raw-data', (data) => {
@@ -1473,14 +1526,28 @@ socket.on('raw-command-error', (error) => {
 
 // Socket event handlers
 socket.on('ports-list', (ports) => {
-    elements.portSelect.innerHTML = '<option value="">Select Port...</option>';
-    ports.forEach(port => {
-        const option = document.createElement('option');
-        option.value = port.path;
-        option.textContent = `${port.path} - ${port.manufacturer || 'Unknown'}`;
-        elements.portSelect.appendChild(option);
-    });
-    addTerminalLine(`Found ${ports.length} serial ports`, 'info');
+    console.log('Received ports list:', ports); // Debug log
+    console.log('Port select element:', elements.portSelect);
+    
+    if (!elements.portSelect) {
+        console.error('❌ Port select element not found!');
+        return;
+    }
+    
+    try {
+        elements.portSelect.innerHTML = '<option value="">Select Port...</option>';
+        ports.forEach(port => {
+            const option = document.createElement('option');
+            option.value = port.path;
+            option.textContent = `${port.path} - ${port.manufacturer || 'Unknown'}`;
+            elements.portSelect.appendChild(option);
+            console.log(`✅ Added port: ${port.path} - ${port.manufacturer || 'Unknown'}`);
+        });
+        console.log('✅ Port dropdown updated successfully');
+        addTerminalLine(`Found ${ports.length} serial ports`, 'info');
+    } catch (error) {
+        console.error('❌ Error updating port dropdown:', error);
+    }
 });
 
 socket.on('ports-error', (error) => {
@@ -1731,12 +1798,13 @@ function initializeApp() {
         console.error('Error initializing terminal:', error);
     }
     
-    try {
-        loadPorts();
-        debugLog('Ports loading initiated');
-    } catch (error) {
-        console.error('Error loading ports:', error);
-    }
+    // Don't load ports here - wait for socket connection
+    // try {
+    //     loadPorts();
+    //     debugLog('Ports loading initiated');
+    // } catch (error) {
+    //     console.error('Error loading ports:', error);
+    // }
     
     // Initialize chart update rate
     try {

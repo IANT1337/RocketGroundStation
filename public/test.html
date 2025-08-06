@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>COM Port Test</title>
+</head>
+<body>
+    <h1>COM Port Test</h1>
+    <div>
+        <button id="test-ports">Test Port Loading</button>
+        <div id="result"></div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        console.log('Starting test script...');
+        
+        // Check if Socket.IO loaded
+        if (typeof io === 'undefined') {
+            console.error('Socket.IO not loaded!');
+            document.getElementById('result').innerHTML = '<p style="color: red;">Socket.IO not loaded!</p>';
+        } else {
+            console.log('Socket.IO loaded successfully');
+            
+            // Initialize socket connection
+            const socket = io();
+            
+            socket.on('connect', () => {
+                console.log('Socket connected!');
+                document.getElementById('result').innerHTML += '<p style="color: green;">Socket connected!</p>';
+            });
+            
+            socket.on('disconnect', () => {
+                console.log('Socket disconnected!');
+                document.getElementById('result').innerHTML += '<p style="color: red;">Socket disconnected!</p>';
+            });
+            
+            socket.on('ports-list', (ports) => {
+                console.log('Received ports:', ports);
+                document.getElementById('result').innerHTML += `<p style="color: blue;">Found ${ports.length} ports:</p>`;
+                ports.forEach(port => {
+                    document.getElementById('result').innerHTML += `<p>- ${port.path} (${port.manufacturer || 'Unknown'})</p>`;
+                });
+            });
+            
+            socket.on('ports-error', (error) => {
+                console.error('Ports error:', error);
+                document.getElementById('result').innerHTML += `<p style="color: red;">Port error: ${error}</p>`;
+            });
+            
+            // Test button
+            document.getElementById('test-ports').addEventListener('click', () => {
+                console.log('Requesting ports...');
+                document.getElementById('result').innerHTML += '<p>Requesting ports...</p>';
+                socket.emit('get-ports');
+            });
+        }
+    </script>
+</body>
+</html>
