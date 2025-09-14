@@ -21,7 +21,6 @@ socket.on('connect_error', (error) => {
 
 // Debug configuration
 let DEBUG_ENABLED = false; // Set to true to enable debug console logs
-let FULL_LOGGING_ENABLED = false; // Set to true to log every telemetry message
 
 // Debug wrapper function
 function debugLog(...args) {
@@ -52,6 +51,8 @@ let currentRoll = 0;
 let currentPitch = 0;
 let currentYaw = 0;
 
+
+
 // Data arrays for charts
 let timeLabels = [];
 let altitudeGpsData = [];
@@ -73,21 +74,19 @@ let busVoltageData = [];
 let currentData = [];
 let powerData = [];
 
-// Telemetry averaging for log display
-let telemetryBuffer = [];
-let telemetryCounter = 0;
+
 
 // Chart update rate control
 let chartUpdateRate = 10; // Default to 10 data points
 let currentRocketMode = '-';
+let currentRocketModeNumeric = null; // Track numeric mode value
 let chartDataBuffer = []; // Buffer for averaging chart data
 let chartUpdateCounter = 0;
+let userHasSetChartRate = false; // Track if user has manually set the chart rate
 
 // Terminal variables
 let terminalElement = null;
-let discardTelemetryPackets = true;
-const TELEMETRY_LOG_INTERVAL = 10; // Log every 10th telemetry message as average
-const TELEMETRY_AVERAGE_WINDOW = 10; // Average over last 10 messages
+
 
 // GPS validity tracking
 let lastGpsValidTime = null;
@@ -97,66 +96,8 @@ const GPS_INVALID_THRESHOLD = 7000; // 7 seconds in milliseconds
 // CSV status tracking
 let currentCsvFilename = null;
 
-// DOM elements
-const elements = {
-    portSelect: document.getElementById('port-select'),
-    baudRate: document.getElementById('baud-rate'),
-    connectBtn: document.getElementById('connect-btn'),
-    disconnectBtn: document.getElementById('disconnect-btn'),
-    clearDataBtn: document.getElementById('clear-data-btn'),
-    refreshPortsBtn: document.getElementById('refresh-ports'),
-    debugModeCheckbox: document.getElementById('debug-mode'),
-    fullLoggingCheckbox: document.getElementById('full-logging'),
-    chartUpdateRateSelect: document.getElementById('chart-update-rate'), // May not exist
-    currentModeIndicator: document.getElementById('current-mode-indicator'), // May not exist
-    serialStatus: document.getElementById('serial-status'),
-    csvStatus: document.getElementById('csv-status'),
-    dataCount: document.getElementById('data-count'),
-    messageCount: document.getElementById('message-count'),
-    sleepCmd: document.getElementById('sleep-cmd'),
-    maintCmd: document.getElementById('maint-cmd'),
-    flightCmd: document.getElementById('flight-cmd'),
-    lastCommand: document.getElementById('last-command')
-};
-
-// Validate DOM elements
-console.log('DOM Elements validation:');
-Object.keys(elements).forEach(key => {
-    if (!elements[key]) {
-        console.error(`❌ Element '${key}' not found!`);
-    } else {
-        console.log(`✅ Element '${key}' found`);
-    }
-});
-
-// Current data elements mapping
-const currentDataElements = {
-    timestamp: document.getElementById('current-timestamp'),
-    mode: document.getElementById('current-mode'),
-    latitude: document.getElementById('current-latitude'),
-    longitude: document.getElementById('current-longitude'),
-    altitude_gps: document.getElementById('current-altitude-gps'),
-    altitude_pressure: document.getElementById('current-altitude-pressure'),
-    pressure: document.getElementById('current-pressure'),
-    gps_valid: document.getElementById('current-gps-valid'),
-    pressure_valid: document.getElementById('current-pressure-valid'),
-    accel_x: document.getElementById('current-accel-x'),
-    accel_y: document.getElementById('current-accel-y'),
-    accel_z: document.getElementById('current-accel-z'),
-    gyro_x: document.getElementById('current-gyro-x'),
-    gyro_y: document.getElementById('current-gyro-y'),
-    gyro_z: document.getElementById('current-gyro-z'),
-    // Note: Magnetometer elements don't exist in HTML, removed to prevent errors
-    // mag_x: document.getElementById('current-mag-x'),
-    // mag_y: document.getElementById('current-mag-y'), 
-    // mag_z: document.getElementById('current-mag-z'),
-    imu_temperature: document.getElementById('current-imu-temperature'),
-    imu_valid: document.getElementById('current-imu-valid'),
-    bus_voltage: document.getElementById('current-bus-voltage'),
-    current: document.getElementById('current-current'),
-    power: document.getElementById('current-power'),
-    power_valid: document.getElementById('current-power-valid')
-};
+// DOM elements - will be initialized in DOMContentLoaded
+let elements = {};
 
 // Initialize charts
 function initializeCharts() {
@@ -207,6 +148,9 @@ function initializeCharts() {
                     title: {
                         display: true,
                         text: 'Altitude (m)'
+                    },
+                    ticks: {
+                        stepSize: 1
                     }
                 }
             },
@@ -251,8 +195,12 @@ function initializeCharts() {
                     title: {
                         display: true,
                         text: 'Pressure (Pa)'
+                    
+                                        },
+                    ticks: {
+                        stepSize: 1
                     }
-                }
+                },
             },
             animation: {
                 duration: 0
@@ -439,6 +387,9 @@ function initializeCharts() {
                     title: {
                         display: true,
                         text: 'Temperature (°C)'
+                    },
+                    ticks: {
+                        stepSize: 1
                     }
                 }
             },
@@ -759,6 +710,9 @@ function updateChartUpdateRate() {
     const newRate = parseInt(elements.chartUpdateRateSelect.value);
     chartUpdateRate = newRate;
     
+    // Mark that user has manually set the chart rate
+    userHasSetChartRate = true;
+    
     // Clear the buffer when rate changes
     chartDataBuffer = [];
     chartUpdateCounter = 0;
@@ -768,11 +722,37 @@ function updateChartUpdateRate() {
 }
 
 function setChartUpdateRateByMode(mode) {
+    // For SLEEP mode, always set to real-time regardless of user preference
+    // For other modes, don't auto-change if user has manually set the rate
+    if (userHasSetChartRate && mode !== '0') {
+        debugLog(`Skipping auto chart rate change - user has manually set rate to ${chartUpdateRate}`);
+        
+        // Still update the mode indicator
+        const modeNames = {
+            '0': 'SLEEP',
+            '1': 'FLIGHT',
+            '2': 'MAINTENANCE',
+            '3': 'APOGEE',
+            '4': 'DESCENT',
+            '5': 'RECOVERY'
+        };
+        
+        const modeName = modeNames[mode] || mode;
+        currentRocketMode = modeName;
+        currentRocketModeNumeric = mode;
+        
+        if (elements.currentModeIndicator) {
+            elements.currentModeIndicator.textContent = `Mode: ${modeName}`;
+        }
+        
+        return;
+    }
+    
     let newRate;
     const modeNames = {
         '0': 'SLEEP',
-        '1': 'PAD', 
-        '2': 'FLIGHT',
+        '1': 'FLIGHT',
+        '2': 'MAINTENANCE',
         '3': 'APOGEE',
         '4': 'DESCENT',
         '5': 'RECOVERY'
@@ -780,6 +760,7 @@ function setChartUpdateRateByMode(mode) {
     
     const modeName = modeNames[mode] || mode;
     currentRocketMode = modeName;
+    currentRocketModeNumeric = mode;
     
     // Update mode indicator
     if (elements.currentModeIndicator) {
@@ -789,16 +770,29 @@ function setChartUpdateRateByMode(mode) {
     // Set default rates based on mode
     if (mode === '0' || modeName === 'SLEEP') {
         newRate = 1; // Real-time for sleep mode
-    } else if (mode === '2' || modeName === 'FLIGHT' || mode === '1' || modeName === 'PAD') {
-        newRate = 10; // Averaged for maintenance and flight modes
+    } else if (mode === '2' || modeName === 'FLIGHT' || mode === '1' || modeName === 'MAINTENANCE') {
+        newRate = 1; // Averaged for maintenance and flight modes
     } else {
         newRate = 10; // Default for other modes
     }
     
     // Only update if rate has changed
     if (newRate !== chartUpdateRate) {
-        elements.chartUpdateRateSelect.value = newRate;
-        updateChartUpdateRate();
+        if (elements.chartUpdateRateSelect) {
+            elements.chartUpdateRateSelect.value = newRate;
+        }
+        chartUpdateRate = newRate;
+        
+        // Clear the buffer when rate changes
+        chartDataBuffer = [];
+        chartUpdateCounter = 0;
+        
+        if (modeName === 'SLEEP') {
+            addTerminalLine(`Chart update rate set to real-time for ${modeName} mode (updates every data point)`, 'info');
+        } else {
+            addTerminalLine(`Chart update rate auto-set to 1:${newRate} for ${modeName} mode (${newRate === 1 ? 'real-time' : 'averaged'})`, 'info');
+        }
+        debugLog(`Chart update rate auto-set to: ${newRate} for mode: ${modeName}`);
     }
 }
 
@@ -911,8 +905,10 @@ function updateCurrentData(data) {
                 };
                 
                 // Check if mode has changed and update chart rate accordingly
-                if (value !== undefined && value !== null && String(value) !== currentRocketMode) {
-                    setChartUpdateRateByMode(String(value));
+                const numericMode = String(value);
+                if (value !== undefined && value !== null && numericMode !== currentRocketModeNumeric) {
+                    currentRocketModeNumeric = numericMode;
+                    setChartUpdateRateByMode(numericMode);
                 }
                 
                 value = modeNames[value] || value || '-';
@@ -987,6 +983,14 @@ function processINA260Data(data) {
 }
 
 // Update charts with new data
+// Helper function to check if a value should be included in charts (excludes zero values)
+// Zero values are considered invalid sensor data and should not be plotted
+// This improves chart readability by avoiding misleading zero spikes
+// Note: Logs still contain all data including zeros
+function isValidForChart(value) {
+    return value !== null && value !== undefined && value !== 0 && !isNaN(value);
+}
+
 function updateCharts(data) {
     debugLog('updateCharts called with:', data);
     
@@ -1018,7 +1022,7 @@ function updateCharts(data) {
     chartUpdateCounter++;
     
     // Always update GPS chart immediately (not affected by update rate)
-    if (data.gps_valid && data.latitude && data.longitude) {
+    if (data.gps_valid && isValidForChart(data.latitude) && isValidForChart(data.longitude)) {
         gpsChart.data.datasets[0].data.push({
             x: data.longitude,
             y: data.latitude
@@ -1049,26 +1053,26 @@ function updateCharts(data) {
         // Create a simple time label for the x-axis
         const timeLabel = moment(processedData.server_timestamp).format('HH:mm:ss');
         
-        // Add new data point to our arrays
+        // Add new data point to our arrays (only valid values)
         timeLabels.push(timeLabel);
-        altitudeGpsData.push(processedData.altitude_gps);
-        altitudePressureData.push(processedData.altitude_pressure);
-        pressureData.push(processedData.pressure);
-        rssiData.push(processedData.rssi);
+        altitudeGpsData.push(isValidForChart(processedData.altitude_gps) ? processedData.altitude_gps : null);
+        altitudePressureData.push(isValidForChart(processedData.altitude_pressure) ? processedData.altitude_pressure : null);
+        pressureData.push(isValidForChart(processedData.pressure) ? processedData.pressure : null);
+        rssiData.push(processedData.rssi); // RSSI can be negative, so don't filter zeros
         
-        // Add IMU data to arrays
-        accelXData.push(processedData.accel_x);
-        accelYData.push(processedData.accel_y);
-        accelZData.push(processedData.accel_z);
-        gyroXData.push(processedData.gyro_x);
-        gyroYData.push(processedData.gyro_y);
-        gyroZData.push(processedData.gyro_z);
-        imuTemperatureData.push(processedData.imu_temperature);
+        // Add IMU data to arrays (only valid values)
+        accelXData.push(isValidForChart(processedData.accel_x) ? processedData.accel_x : null);
+        accelYData.push(isValidForChart(processedData.accel_y) ? processedData.accel_y : null);
+        accelZData.push(isValidForChart(processedData.accel_z) ? processedData.accel_z : null);
+        gyroXData.push(isValidForChart(processedData.gyro_x) ? processedData.gyro_x : null);
+        gyroYData.push(isValidForChart(processedData.gyro_y) ? processedData.gyro_y : null);
+        gyroZData.push(isValidForChart(processedData.gyro_z) ? processedData.gyro_z : null);
+        imuTemperatureData.push(isValidForChart(processedData.imu_temperature) ? processedData.imu_temperature : null);
         
-        // Add power data to arrays
-        busVoltageData.push(processedData.bus_voltage);
-        currentData.push(processedData.current);
-        powerData.push(processedData.power);
+        // Add power data to arrays (only valid values)
+        busVoltageData.push(isValidForChart(processedData.bus_voltage) ? processedData.bus_voltage : null);
+        currentData.push(isValidForChart(processedData.current) ? processedData.current : null);
+        powerData.push(isValidForChart(processedData.power) ? processedData.power : null);
         
         // Debug power data values
         if (processedData.power_valid && (processedData.bus_voltage > 0 || processedData.current !== 0 || processedData.power > 0)) {
@@ -1081,33 +1085,33 @@ function updateCharts(data) {
             });
         }
         
-        // Add data to chart labels and datasets
+        // Add data to chart labels and datasets (only add non-zero values)
         altitudeChart.data.labels.push(timeLabel);
-        altitudeChart.data.datasets[0].data.push(processedData.altitude_gps);
-        altitudeChart.data.datasets[1].data.push(processedData.altitude_pressure);
+        altitudeChart.data.datasets[0].data.push(isValidForChart(processedData.altitude_gps) ? processedData.altitude_gps : null);
+        altitudeChart.data.datasets[1].data.push(isValidForChart(processedData.altitude_pressure) ? processedData.altitude_pressure : null);
         
         pressureChart.data.labels.push(timeLabel);
-        pressureChart.data.datasets[0].data.push(processedData.pressure);
+        pressureChart.data.datasets[0].data.push(isValidForChart(processedData.pressure) ? processedData.pressure : null);
         
-        // Add IMU data to charts
+        // Add IMU data to charts (only add non-zero values)
         accelChart.data.labels.push(timeLabel);
-        accelChart.data.datasets[0].data.push(processedData.accel_x);
-        accelChart.data.datasets[1].data.push(processedData.accel_y);
-        accelChart.data.datasets[2].data.push(processedData.accel_z);
+        accelChart.data.datasets[0].data.push(isValidForChart(processedData.accel_x) ? processedData.accel_x : null);
+        accelChart.data.datasets[1].data.push(isValidForChart(processedData.accel_y) ? processedData.accel_y : null);
+        accelChart.data.datasets[2].data.push(isValidForChart(processedData.accel_z) ? processedData.accel_z : null);
         
         gyroChart.data.labels.push(timeLabel);
-        gyroChart.data.datasets[0].data.push(processedData.gyro_x);
-        gyroChart.data.datasets[1].data.push(processedData.gyro_y);
-        gyroChart.data.datasets[2].data.push(processedData.gyro_z);
+        gyroChart.data.datasets[0].data.push(isValidForChart(processedData.gyro_x) ? processedData.gyro_x : null);
+        gyroChart.data.datasets[1].data.push(isValidForChart(processedData.gyro_y) ? processedData.gyro_y : null);
+        gyroChart.data.datasets[2].data.push(isValidForChart(processedData.gyro_z) ? processedData.gyro_z : null);
         
         temperatureChart.data.labels.push(timeLabel);
-        temperatureChart.data.datasets[0].data.push(processedData.imu_temperature);
+        temperatureChart.data.datasets[0].data.push(isValidForChart(processedData.imu_temperature) ? processedData.imu_temperature : null);
         
-        // Add power data to charts
+        // Add power data to charts (only add non-zero values)
         powerChart.data.labels.push(timeLabel);
-        powerChart.data.datasets[0].data.push(processedData.bus_voltage);
-        powerChart.data.datasets[1].data.push(processedData.current);
-        powerChart.data.datasets[2].data.push(processedData.power);
+        powerChart.data.datasets[0].data.push(isValidForChart(processedData.bus_voltage) ? processedData.bus_voltage : null);
+        powerChart.data.datasets[1].data.push(isValidForChart(processedData.current) ? processedData.current : null);
+        powerChart.data.datasets[2].data.push(isValidForChart(processedData.power) ? processedData.power : null);
         
         debugLog('Chart data lengths:', {
             timeLabels: timeLabels.length,
@@ -1228,124 +1232,17 @@ function updateCharts(data) {
     }
     
     // Update 3D rocket orientation if visualizer is initialized (always real-time)
+    // Only update with valid (non-zero) sensor values
     if (rocketModel) {
         updateRocketOrientation(
-            data.accel_x || 0,
-            data.accel_y || 0, 
-            data.accel_z || 0,
-            data.gyro_x || 0,
-            data.gyro_y || 0,
-            data.gyro_z || 0
+            isValidForChart(data.accel_x) ? data.accel_x : 0,
+            isValidForChart(data.accel_y) ? data.accel_y : 0, 
+            isValidForChart(data.accel_z) ? data.accel_z : 0,
+            isValidForChart(data.gyro_x) ? data.gyro_x : 0,
+            isValidForChart(data.gyro_y) ? data.gyro_y : 0,
+            isValidForChart(data.gyro_z) ? data.gyro_z : 0
         );
     }
-}
-
-// Process telemetry for averaged logging
-function processTelemetryForLogging(data) {
-    // If full logging is enabled, log every message
-    if (FULL_LOGGING_ENABLED) {
-        const modeNames = {
-            '0': 'INIT',
-            '1': 'PAD',
-            '2': 'FLIGHT',
-            '3': 'APOGEE',
-            '4': 'DESCENT',
-            '5': 'RECOVERY'
-        };
-        const modeName = modeNames[data.mode] || data.mode;
-        const logMessage = `TELEM: ${modeName} | GPS: ${data.latitude?.toFixed(6)}, ${data.longitude?.toFixed(6)} | Alt: ${data.altitude_gps?.toFixed(1)}m (GPS), ${data.altitude_pressure?.toFixed(1)}m (Press) | Pressure: ${data.pressure?.toFixed(1)}Pa | Valid: GPS=${data.gps_valid ? 'Y' : 'N'}, Press=${data.pressure_valid ? 'Y' : 'N'}`;
-        debugLog(logMessage);
-        return;
-    }
-    
-    // Add to buffer for averaging
-    telemetryBuffer.push(data);
-    
-    // Keep buffer size manageable
-    if (telemetryBuffer.length > TELEMETRY_AVERAGE_WINDOW) {
-        telemetryBuffer.shift();
-    }
-    
-    telemetryCounter++;
-    
-    // Only log averaged data every N messages
-    if (telemetryCounter % TELEMETRY_LOG_INTERVAL === 0) {
-        // Calculate averages from buffer
-        const avgData = calculateTelemetryAverages();
-        const modeNames = {
-            '0': 'INIT',
-            '1': 'PAD',
-            '2': 'FLIGHT',
-            '3': 'APOGEE',
-            '4': 'DESCENT',
-            '5': 'RECOVERY'
-        };
-        
-        // Use the most recent mode (modes don't average well)
-        const modeName = modeNames[data.mode] || data.mode;
-        
-        const logMessage = `AVG TELEM (${telemetryBuffer.length} msgs): ${modeName} | GPS: ${avgData.latitude?.toFixed(6)}, ${avgData.longitude?.toFixed(6)} | Alt: ${avgData.altitude_gps?.toFixed(1)}m (GPS), ${avgData.altitude_pressure?.toFixed(1)}m (Press) | Pressure: ${avgData.pressure?.toFixed(1)}Pa | Valid: GPS=${data.gps_valid ? 'Y' : 'N'}, Press=${data.pressure_valid ? 'Y' : 'N'}`;
-        debugLog(logMessage);
-    }
-}
-
-// Calculate averages from telemetry buffer
-function calculateTelemetryAverages() {
-    if (telemetryBuffer.length === 0) return {};
-    
-    const sums = {
-        latitude: 0,
-        longitude: 0,
-        altitude_gps: 0,
-        altitude_pressure: 0,
-        pressure: 0,
-        rssi: 0
-    };
-    
-    let validCount = {
-        latitude: 0,
-        longitude: 0,
-        altitude_gps: 0,
-        altitude_pressure: 0,
-        pressure: 0,
-        rssi: 0
-    };
-    
-    telemetryBuffer.forEach(data => {
-        if (typeof data.latitude === 'number' && !isNaN(data.latitude)) {
-            sums.latitude += data.latitude;
-            validCount.latitude++;
-        }
-        if (typeof data.longitude === 'number' && !isNaN(data.longitude)) {
-            sums.longitude += data.longitude;
-            validCount.longitude++;
-        }
-        if (typeof data.altitude_gps === 'number' && !isNaN(data.altitude_gps)) {
-            sums.altitude_gps += data.altitude_gps;
-            validCount.altitude_gps++;
-        }
-        if (typeof data.altitude_pressure === 'number' && !isNaN(data.altitude_pressure)) {
-            sums.altitude_pressure += data.altitude_pressure;
-            validCount.altitude_pressure++;
-        }
-        if (typeof data.pressure === 'number' && !isNaN(data.pressure)) {
-            sums.pressure += data.pressure;
-            validCount.pressure++;
-        }
-        if (typeof data.rssi === 'number' && !isNaN(data.rssi)) {
-            sums.rssi += data.rssi;
-            validCount.rssi++;
-        }
-    });
-    
-    const averages = {};
-    Object.keys(sums).forEach(key => {
-        if (validCount[key] > 0) {
-            averages[key] = sums[key] / validCount[key];
-        }
-    });
-    
-    return averages;
 }
 
 // Terminal functions
@@ -1401,7 +1298,6 @@ function initializeTerminal() {
     const commandInput = document.getElementById('command-input');
     const sendButton = document.getElementById('send-command');
     const clearButton = document.getElementById('clear-terminal');
-    const discardCheckbox = document.getElementById('discard-telemetry');
     
     // Event listeners
     sendButton.addEventListener('click', sendTerminalCommand);
@@ -1413,14 +1309,6 @@ function initializeTerminal() {
             sendTerminalCommand();
         }
     });
-    
-    // Discard telemetry checkbox
-    discardCheckbox.addEventListener('change', (e) => {
-        discardTelemetryPackets = e.target.checked;
-    });
-    
-    // Initialize discard setting
-    discardTelemetryPackets = discardCheckbox.checked;
 }
 
 // Load available serial ports
@@ -1438,81 +1326,79 @@ function sendRocketCommand(command) {
     }
 }
 
-// Event Listeners
-elements.refreshPortsBtn.addEventListener('click', loadPorts);
+// Initialize event listeners (called from initializeApp after DOM elements are ready)
+function initializeEventListeners() {
+    // Port management event listeners
+    elements.refreshPortsBtn.addEventListener('click', loadPorts);
 
-// Add test button event listener
-document.getElementById('test-ports').addEventListener('click', () => {
-    console.log('=== PORT TEST CLICKED ===');
-    console.log('Socket connected:', socket.connected);
-    console.log('Port select element:', elements.portSelect);
-    console.log('Current dropdown content:', elements.portSelect ? elements.portSelect.innerHTML : 'N/A');
-    loadPorts();
-});
-
-elements.connectBtn.addEventListener('click', () => {
-    const port = elements.portSelect.value;
-    const baudRate = elements.baudRate.value;
-    
-    if (!port) {
-        alert('Please select a serial port');
-        return;
+    // Add test button event listener
+    const testPortsBtn = document.getElementById('test-ports');
+    if (testPortsBtn) {
+        testPortsBtn.addEventListener('click', () => {
+            console.log('=== PORT TEST CLICKED ===');
+            console.log('Socket connected:', socket.connected);
+            console.log('Port select element:', elements.portSelect);
+            console.log('Current dropdown content:', elements.portSelect ? elements.portSelect.innerHTML : 'N/A');
+            loadPorts();
+        });
     }
-    
-    socket.emit('connect-serial', port, baudRate);
-    addTerminalLine(`Attempting to connect to ${port} at ${baudRate} baud...`, 'info');
-});
 
-elements.disconnectBtn.addEventListener('click', () => {
-    socket.emit('disconnect-serial');
-});
+    elements.connectBtn.addEventListener('click', () => {
+        const port = elements.portSelect.value;
+        const baudRate = elements.baudRate.value;
+        
+        if (!port) {
+            alert('Please select a serial port');
+            return;
+        }
+        
+        socket.emit('connect-serial', port, baudRate);
+        addTerminalLine(`Attempting to connect to ${port} at ${baudRate} baud...`, 'info');
+    });
 
-elements.clearDataBtn.addEventListener('click', () => {
-    if (confirm('Are you sure you want to clear all data?')) {
-        socket.emit('clear-data');
+    elements.disconnectBtn.addEventListener('click', () => {
+        socket.emit('disconnect-serial');
+    });
+
+    elements.clearDataBtn.addEventListener('click', () => {
+        if (confirm('Are you sure you want to clear all data?')) {
+            socket.emit('clear-data');
+        }
+    });
+
+    // Rocket control event listeners
+    elements.sleepCmd.addEventListener('click', () => {
+        sendRocketCommand('SLEEP');
+    });
+
+    elements.maintCmd.addEventListener('click', () => {
+        sendRocketCommand('MAINT');
+    });
+
+    elements.flightCmd.addEventListener('click', () => {
+        sendRocketCommand('FLIGHT');
+    });
+
+    elements.cameraCmd.addEventListener('click', () => {
+        sendRocketCommand('CAM_TOGGLE');
+    });
+
+    // Debug mode controls
+    elements.debugModeCheckbox.addEventListener('change', (e) => {
+        DEBUG_ENABLED = e.target.checked;
+        addTerminalLine(`Debug mode ${DEBUG_ENABLED ? 'enabled' : 'disabled'}`, 'info');
+    });
+
+    // Chart update rate control (only if element exists)
+    if (elements.chartUpdateRateSelect) {
+        elements.chartUpdateRateSelect.addEventListener('change', updateChartUpdateRate);
     }
-});
 
-// Rocket control event listeners
-elements.sleepCmd.addEventListener('click', () => {
-    sendRocketCommand('SLEEP');
-});
-
-elements.maintCmd.addEventListener('click', () => {
-    sendRocketCommand('MAINT');
-});
-
-elements.flightCmd.addEventListener('click', () => {
-    sendRocketCommand('FLIGHT');
-});
-
-// Debug mode controls
-elements.debugModeCheckbox.addEventListener('change', (e) => {
-    DEBUG_ENABLED = e.target.checked;
-    addTerminalLine(`Debug mode ${DEBUG_ENABLED ? 'enabled' : 'disabled'}`, 'info');
-});
-
-elements.fullLoggingCheckbox.addEventListener('change', (e) => {
-    FULL_LOGGING_ENABLED = e.target.checked;
-    addTerminalLine(`Full telemetry logging ${FULL_LOGGING_ENABLED ? 'enabled' : 'disabled'}`, 'info');
-});
-
-// Chart update rate control
-// Event listener for chart update rate (only if element exists)
-if (elements.chartUpdateRateSelect) {
-    elements.chartUpdateRateSelect.addEventListener('change', updateChartUpdateRate);
+    debugLog('Event listeners initialized successfully');
 }
 
 // Socket event handlers for terminal
 socket.on('raw-data', (data) => {
-    // Check if this looks like a telemetry packet and should be discarded
-    const isTelemetryPacket = data.startsWith('TELEM');
-    
-    if (discardTelemetryPackets && isTelemetryPacket) {
-        // Don't show telemetry packets in terminal if discard is enabled
-        return;
-    }
-    
     addTerminalLine(data, 'received');
 });
 
@@ -1526,27 +1412,38 @@ socket.on('raw-command-error', (error) => {
 
 // Socket event handlers
 socket.on('ports-list', (ports) => {
+    console.log('=== PORTS LIST RECEIVED ===');
     console.log('Received ports list:', ports); // Debug log
     console.log('Port select element:', elements.portSelect);
+    console.log('Port select element exists:', !!elements.portSelect);
     
     if (!elements.portSelect) {
         console.error('❌ Port select element not found!');
+        console.log('Trying to find element by ID directly...');
+        const directElement = document.getElementById('port-select');
+        console.log('Direct element lookup result:', directElement);
         return;
     }
     
     try {
+        console.log('Clearing existing options...');
         elements.portSelect.innerHTML = '<option value="">Select Port...</option>';
-        ports.forEach(port => {
+        
+        console.log('Adding', ports.length, 'ports...');
+        ports.forEach((port, index) => {
+            console.log(`Adding port ${index + 1}:`, port);
             const option = document.createElement('option');
             option.value = port.path;
             option.textContent = `${port.path} - ${port.manufacturer || 'Unknown'}`;
             elements.portSelect.appendChild(option);
             console.log(`✅ Added port: ${port.path} - ${port.manufacturer || 'Unknown'}`);
         });
-        console.log('✅ Port dropdown updated successfully');
+        
+        console.log('✅ Port dropdown updated successfully with', elements.portSelect.options.length, 'total options');
         addTerminalLine(`Found ${ports.length} serial ports`, 'info');
     } catch (error) {
         console.error('❌ Error updating port dropdown:', error);
+        console.error('Error details:', error.stack);
     }
 });
 
@@ -1564,6 +1461,7 @@ socket.on('serial-status', (status) => {
         elements.sleepCmd.disabled = false;
         elements.maintCmd.disabled = false;
         elements.flightCmd.disabled = false;
+        elements.cameraCmd.disabled = false;
         // Enable terminal controls when connected
         document.getElementById('command-input').disabled = false;
         document.getElementById('send-command').disabled = false;
@@ -1577,6 +1475,7 @@ socket.on('serial-status', (status) => {
         elements.sleepCmd.disabled = true;
         elements.maintCmd.disabled = true;
         elements.flightCmd.disabled = true;
+        elements.cameraCmd.disabled = true;
         // Disable terminal controls when disconnected
         document.getElementById('command-input').disabled = true;
         document.getElementById('send-command').disabled = true;
@@ -1646,9 +1545,6 @@ socket.on('telemetry-data', (data) => {
         // Still update data count even if charts fail
         elements.dataCount.textContent = (parseInt(elements.dataCount.textContent) || 0) + 1;
     }
-    
-    // Process telemetry for averaged logging instead of logging every message
-    processTelemetryForLogging(data);
 });
 
 socket.on('telemetry-history', (data) => {
@@ -1667,10 +1563,6 @@ socket.on('data-cleared', () => {
     altitudePressureData.length = 0;
     pressureData.length = 0;
     rssiData.length = 0; // Clear RSSI data array
-    
-    // Clear telemetry averaging variables
-    telemetryBuffer.length = 0;
-    telemetryCounter = 0;
     
     // Reset GPS validity tracking
     lastGpsValidTime = null;
@@ -1777,6 +1669,73 @@ document.addEventListener('DOMContentLoaded', () => {
 function initializeApp() {
     debugLog('Initializing application...');
     
+    // Initialize DOM elements
+    try {
+        elements = {
+            portSelect: document.getElementById('port-select'),
+            baudRate: document.getElementById('baud-rate'),
+            connectBtn: document.getElementById('connect-btn'),
+            disconnectBtn: document.getElementById('disconnect-btn'),
+            clearDataBtn: document.getElementById('clear-data-btn'),
+            refreshPortsBtn: document.getElementById('refresh-ports'),
+            debugModeCheckbox: document.getElementById('debug-mode'),
+            chartUpdateRateSelect: document.getElementById('chart-update-rate'), // May not exist
+            currentModeIndicator: document.getElementById('current-mode-indicator'), // May not exist
+            serialStatus: document.getElementById('serial-status'),
+            csvStatus: document.getElementById('csv-status'),
+            dataCount: document.getElementById('data-count'),
+            messageCount: document.getElementById('message-count'),
+            sleepCmd: document.getElementById('sleep-cmd'),
+            maintCmd: document.getElementById('maint-cmd'),
+            flightCmd: document.getElementById('flight-cmd'),
+            cameraCmd: document.getElementById('camera-cmd'),
+            lastCommand: document.getElementById('last-command')
+        };
+
+        // Current data elements mapping
+        currentDataElements = {
+            timestamp: document.getElementById('current-timestamp'),
+            mode: document.getElementById('current-mode'),
+            latitude: document.getElementById('current-latitude'),
+            longitude: document.getElementById('current-longitude'),
+            altitude_gps: document.getElementById('current-altitude-gps'),
+            altitude_pressure: document.getElementById('current-altitude-pressure'),
+            pressure: document.getElementById('current-pressure'),
+            gps_valid: document.getElementById('current-gps-valid'),
+            pressure_valid: document.getElementById('current-pressure-valid'),
+            accel_x: document.getElementById('current-accel-x'),
+            accel_y: document.getElementById('current-accel-y'),
+            accel_z: document.getElementById('current-accel-z'),
+            gyro_x: document.getElementById('current-gyro-x'),
+            gyro_y: document.getElementById('current-gyro-y'),
+            gyro_z: document.getElementById('current-gyro-z'),
+            // Note: Magnetometer elements don't exist in HTML, removed to prevent errors
+            // mag_x: document.getElementById('current-mag-x'),
+            // mag_y: document.getElementById('current-mag-y'), 
+            // mag_z: document.getElementById('current-mag-z'),
+            imu_temperature: document.getElementById('current-imu-temperature'),
+            imu_valid: document.getElementById('current-imu-valid'),
+            bus_voltage: document.getElementById('current-bus-voltage'),
+            current: document.getElementById('current-current'),
+            power: document.getElementById('current-power'),
+            power_valid: document.getElementById('current-power-valid')
+        };
+
+        // Validate DOM elements
+        console.log('DOM Elements validation:');
+        Object.keys(elements).forEach(key => {
+            if (!elements[key]) {
+                console.error(`❌ Element '${key}' not found!`);
+            } else {
+                console.log(`✅ Element '${key}' found`);
+            }
+        });
+
+        debugLog('DOM elements initialized successfully');
+    } catch (error) {
+        console.error('Error initializing DOM elements:', error);
+    }
+    
     try {
         initializeCharts();
         debugLog('Charts initialized successfully');
@@ -1812,6 +1771,14 @@ function initializeApp() {
         debugLog('Chart update rate initialized');
     } catch (error) {
         console.error('Error initializing chart update rate:', error);
+    }
+    
+    // Initialize event listeners
+    try {
+        initializeEventListeners();
+        debugLog('Event listeners initialized successfully');
+    } catch (error) {
+        console.error('Error initializing event listeners:', error);
     }
     
     // Initialize complete - all notifications now go to terminal

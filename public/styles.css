@@ -753,6 +753,169 @@ select:focus, input:focus {
     text-shadow: 0 0 5px rgba(0, 255, 0, 0.6);
 }
 
+/* Performance Panel Styles */
+.performance-panel {
+    background: #000000;
+    border: 2px solid #00ff00;
+    padding: 20px;
+    border-radius: 0;
+    margin-bottom: 25px;
+    box-shadow: 
+        0 0 10px rgba(0, 255, 0, 0.3),
+        inset 0 0 20px rgba(0, 255, 0, 0.05);
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.performance-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #00ff00;
+    padding-bottom: 10px;
+}
+
+.performance-header h3 {
+    color: #00ff00;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    font-size: 1.2em;
+    text-shadow: 
+        0 0 5px #00ff00,
+        0 0 10px #00ff00;
+    margin: 0;
+}
+
+.performance-content {
+    opacity: 1;
+    max-height: 500px;
+    transition: all 0.3s ease;
+    overflow: hidden;
+}
+
+.performance-content.hidden {
+    opacity: 0;
+    max-height: 0;
+    margin: 0;
+}
+
+.performance-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.performance-metric {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 15px;
+    background: #001100;
+    border: 1px solid #00ff00;
+    border-radius: 0;
+    box-shadow: 
+        0 0 10px rgba(0, 255, 0, 0.2),
+        inset 0 0 10px rgba(0, 255, 0, 0.05);
+    transition: all 0.2s ease;
+}
+
+.performance-metric:hover {
+    background: #002200;
+    box-shadow: 
+        0 0 15px rgba(0, 255, 0, 0.3),
+        inset 0 0 15px rgba(0, 255, 0, 0.08);
+}
+
+.metric-label {
+    font-weight: 700;
+    color: #00ff00;
+    font-size: 0.9em;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    text-shadow: 0 0 3px rgba(0, 255, 0, 0.3);
+}
+
+.metric-value {
+    font-weight: 700;
+    color: #00ccff;
+    font-size: 1.1em;
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    text-shadow: 0 0 3px rgba(0, 204, 255, 0.4);
+}
+
+.metric-status {
+    font-size: 1.2em;
+    margin-left: 8px;
+    transition: color 0.3s ease;
+}
+
+.metric-status.good {
+    color: #00ff00;
+    text-shadow: 0 0 5px #00ff00;
+}
+
+.metric-status.warning {
+    color: #ffff00;
+    text-shadow: 0 0 5px #ffff00;
+}
+
+.metric-status.critical {
+    color: #ff0000;
+    text-shadow: 0 0 5px #ff0000;
+    animation: pulse-red 2s infinite;
+}
+
+@keyframes pulse-red {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.performance-alert {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 15px;
+    background: rgba(255, 0, 0, 0.1);
+    border: 2px solid #ff0000;
+    border-radius: 0;
+    box-shadow: 
+        0 0 20px rgba(255, 0, 0, 0.3),
+        inset 0 0 20px rgba(255, 0, 0, 0.05);
+    animation: pulse-red-border 2s infinite;
+}
+
+@keyframes pulse-red-border {
+    0%, 100% { 
+        border-color: #ff0000;
+        box-shadow: 
+            0 0 20px rgba(255, 0, 0, 0.3),
+            inset 0 0 20px rgba(255, 0, 0, 0.05);
+    }
+    50% { 
+        border-color: #ff6666;
+        box-shadow: 
+            0 0 30px rgba(255, 0, 0, 0.5),
+            inset 0 0 20px rgba(255, 0, 0, 0.08);
+    }
+}
+
+.alert-icon {
+    font-size: 1.5em;
+    animation: pulse-red 2s infinite;
+}
+
+#performance-alert-text {
+    color: #ff0000;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    text-shadow: 0 0 5px rgba(255, 0, 0, 0.5);
+}
+
 /* Terminal Panel Styles */
 .terminal-panel {
     background: #000000;
@@ -1101,6 +1264,26 @@ select:focus, input:focus {
     background-color: #550000;
     border-color: #ff3333;
     color: #ff3333;
+}
+
+.btn-camera {
+    background-color: #000033;
+    border-color: #0088ff;
+    color: #0088ff;
+    text-shadow: 0 0 3px rgba(0, 136, 255, 0.4);
+    box-shadow: 
+        0 0 15px rgba(0, 136, 255, 0.3),
+        inset 0 0 15px rgba(0, 136, 255, 0.1);
+}
+
+.btn-camera:hover:not(:disabled) {
+    background-color: #001155;
+    border-color: #00aaff;
+    color: #00aaff;
+    box-shadow: 
+        0 0 25px rgba(0, 170, 255, 0.6),
+        inset 0 0 20px rgba(0, 170, 255, 0.2);
+    text-shadow: 0 0 5px rgba(0, 170, 255, 0.6);
 }
 
 

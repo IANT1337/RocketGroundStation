@@ -8,6 +8,212 @@ const moment = require('moment');
 const path = require('path');
 const fs = require('fs');
 
+// Performance monitoring functions
+function measureEventLoopLag() {
+    const start = process.hrtime();
+    setImmediate(() => {
+        const delta = process.hrtime(start);
+        const nanosec = delta[0] * 1e9 + delta[1];
+        const millisec = nanosec / 1e6;
+        performanceMetrics.eventLoopLag = millisec;
+    });
+}
+
+function updatePerformanceMetrics() {
+    const now = Date.now();
+    
+    // Update memory usage
+    const memUsage = process.memoryUsage();
+    performanceMetrics.memoryUsage = {
+        rss: memUsage.rss / 1024 / 1024, // MB
+        heapUsed: memUsage.heapUsed / 1024 / 1024, // MB
+        heapTotal: memUsage.heapTotal / 1024 / 1024, // MB
+        external: memUsage.external / 1024 / 1024, // MB
+        arrayBuffers: memUsage.arrayBuffers / 1024 / 1024 // MB
+    };
+    
+    // Update CPU usage
+    const cpuUsage = process.cpuUsage(performanceMetrics.cpuUsage.previous || undefined);
+    performanceMetrics.cpuUsage = {
+        user: cpuUsage.user / 1000, // Convert to milliseconds
+        system: cpuUsage.system / 1000, // Convert to milliseconds
+        previous: cpuUsage
+    };
+    
+    // Calculate message rate
+    const currentTime = now;
+    const timeWindow = currentTime - MESSAGE_RATE_WINDOW * 1000;
+    
+    // Remove old entries from rate buffer
+    messageRateBuffer = messageRateBuffer.filter(timestamp => timestamp > timeWindow);
+    
+    // Calculate messages per second
+    performanceMetrics.messagesPerSecond = messageRateBuffer.length / MESSAGE_RATE_WINDOW;
+    
+    // Check for overload conditions
+    checkServerOverload();
+    
+    // Emit performance data to clients
+    io.emit('performance-metrics', performanceMetrics);
+    
+    lastPerformanceUpdate = now;
+    
+    // Detailed performance analysis
+    analyzeDataFlow();
+}
+
+function analyzeDataFlow() {
+    const currentTime = Date.now();
+    const uptime = (currentTime - performanceMetrics.startTime) / 1000;
+    
+    // Calculate average processing metrics over time
+    const avgProcessingTime = performanceMetrics.telemetryProcessingTime;
+    const avgMessageRate = performanceMetrics.messagesPerSecond;
+    
+    // Determine server capacity status
+    let capacityStatus = 'EXCELLENT';
+    let capacityScore = 100;
+    let recommendations = [];
+    
+    // Evaluate based on multiple factors
+    if (performanceMetrics.eventLoopLag > 100) {
+        capacityStatus = 'CRITICAL';
+        capacityScore = Math.min(capacityScore, 20);
+        recommendations.push('Event loop severely blocked - reduce processing complexity');
+    } else if (performanceMetrics.eventLoopLag > 50) {
+        capacityStatus = 'POOR';
+        capacityScore = Math.min(capacityScore, 40);
+        recommendations.push('Event loop lag detected - monitor processing time');
+    }
+    
+    if (avgProcessingTime > 50) {
+        capacityStatus = 'CRITICAL';
+        capacityScore = Math.min(capacityScore, 25);
+        recommendations.push('Telemetry processing time too high - optimize parsing');
+    } else if (avgProcessingTime > 25) {
+        capacityStatus = 'POOR';
+        capacityScore = Math.min(capacityScore, 50);
+        recommendations.push('Processing time elevated - consider optimization');
+    }
+    
+    const memoryPercent = (performanceMetrics.memoryUsage.heapUsed / performanceMetrics.memoryUsage.heapTotal) * 100;
+    if (memoryPercent > 85) {
+        capacityStatus = 'CRITICAL';
+        capacityScore = Math.min(capacityScore, 30);
+        recommendations.push('High memory usage - check for memory leaks');
+    } else if (memoryPercent > 70) {
+        capacityStatus = 'POOR';
+        capacityScore = Math.min(capacityScore, 60);
+        recommendations.push('Memory usage elevated - monitor trends');
+    }
+    
+    if (avgMessageRate > 100) {
+        if (capacityStatus === 'EXCELLENT') {
+            capacityStatus = 'GOOD';
+            capacityScore = Math.min(capacityScore, 80);
+        }
+        recommendations.push(`High message rate (${avgMessageRate.toFixed(1)}/sec) - monitor server performance closely`);
+    }
+    
+    // Emit capacity analysis to clients
+    io.emit('server-capacity-analysis', {
+        status: capacityStatus,
+        score: capacityScore,
+        messageRate: avgMessageRate,
+        processingTime: avgProcessingTime,
+        eventLoopLag: performanceMetrics.eventLoopLag,
+        memoryPercent: memoryPercent,
+        uptime: uptime,
+        totalMessages: performanceMetrics.totalMessagesReceived,
+        recommendations: recommendations,
+        timestamp: currentTime
+    });
+    
+    // Log capacity status every 30 seconds
+    if (Math.floor(uptime) % 30 === 0 && performanceMetrics.totalMessagesReceived > 0) {
+        console.log(`📊 Server Capacity: ${capacityStatus} (${capacityScore}%) | ` +
+                   `Rate: ${avgMessageRate.toFixed(1)}/sec | ` +
+                   `Processing: ${avgProcessingTime.toFixed(1)}ms | ` +
+                   `Memory: ${memoryPercent.toFixed(1)}% | ` +
+                   `Lag: ${performanceMetrics.eventLoopLag.toFixed(1)}ms`);
+                   
+        if (recommendations.length > 0) {
+            console.log(`💡 Recommendations: ${recommendations.join(', ')}`);
+        }
+    }
+}
+
+function checkServerOverload() {
+    let isCurrentlyOverloaded = false;
+    const reasons = [];
+    
+    // Check event loop lag
+    if (performanceMetrics.eventLoopLag > PERFORMANCE_THRESHOLDS.eventLoopLag) {
+        isCurrentlyOverloaded = true;
+        reasons.push(`Event loop lag: ${performanceMetrics.eventLoopLag.toFixed(1)}ms`);
+    }
+    
+    // Check memory usage (as percentage of heap total)
+    const heapUsagePercent = performanceMetrics.memoryUsage.heapUsed / performanceMetrics.memoryUsage.heapTotal;
+    if (heapUsagePercent > PERFORMANCE_THRESHOLDS.memoryUsage) {
+        isCurrentlyOverloaded = true;
+        reasons.push(`Memory usage: ${(heapUsagePercent * 100).toFixed(1)}%`);
+    }
+    
+    // Check telemetry processing time
+    if (performanceMetrics.telemetryProcessingTime > PERFORMANCE_THRESHOLDS.processingTime) {
+        isCurrentlyOverloaded = true;
+        reasons.push(`Processing time: ${performanceMetrics.telemetryProcessingTime.toFixed(1)}ms`);
+    }
+    
+    // Check message rate (alert if unexpectedly high)
+    if (performanceMetrics.messagesPerSecond > PERFORMANCE_THRESHOLDS.messageRate) {
+        isCurrentlyOverloaded = true;
+        reasons.push(`High message rate: ${performanceMetrics.messagesPerSecond.toFixed(1)}/sec`);
+    }
+    
+    if (isCurrentlyOverloaded) {
+        performanceMetrics.overloadCount++;
+        if (performanceMetrics.overloadCount >= PERFORMANCE_THRESHOLDS.overloadThreshold) {
+            const now = Date.now();
+            // Only alert if it's been at least 10 seconds since last alert
+            if (!performanceMetrics.isOverloaded || (now - performanceMetrics.lastOverloadAlert) > 10000) {
+                performanceMetrics.isOverloaded = true;
+                performanceMetrics.lastOverloadAlert = now;
+                console.log(`⚠️  SERVER OVERLOAD DETECTED: ${reasons.join(', ')}`);
+                // Emit overload alert to clients
+                io.emit('server-overload-alert', {
+                    isOverloaded: true,
+                    reasons: reasons,
+                    metrics: performanceMetrics
+                });
+            }
+        }
+    } else {
+        if (performanceMetrics.isOverloaded) {
+            console.log('✅ Server performance back to normal');
+            io.emit('server-overload-alert', {
+                isOverloaded: false,
+                reasons: [],
+                metrics: performanceMetrics
+            });
+        }
+        performanceMetrics.overloadCount = Math.max(0, performanceMetrics.overloadCount - 1);
+        performanceMetrics.isOverloaded = false;
+    }
+}
+
+// Start performance monitoring
+function startPerformanceMonitoring() {
+    // Measure event loop lag every 100ms
+    setInterval(measureEventLoopLag, 100);
+    
+    // Update performance metrics every second
+    setInterval(updatePerformanceMetrics, PERFORMANCE_UPDATE_INTERVAL);
+    
+    console.log('📊 Performance monitoring started');
+}
+
 // Debug configuration
 const DEBUG_ENABLED = false; // Set to true to enable debug console logs
 
@@ -31,6 +237,37 @@ let csvWriter = null;
 // Data storage for plotting
 let telemetryData = [];
 const MAX_DATA_POINTS = 100; // Keep last 100 data points for plotting
+
+// Performance monitoring variables
+let performanceMetrics = {
+    startTime: Date.now(),
+    totalMessagesReceived: 0,
+    messagesPerSecond: 0,
+    lastMessageTime: Date.now(),
+    eventLoopLag: 0,
+    memoryUsage: {},
+    cpuUsage: {},
+    telemetryProcessingTime: 0,
+    csvWriteTime: 0,
+    socketEmitTime: 0,
+    isOverloaded: false,
+    overloadCount: 0,
+    lastOverloadAlert: 0 // Add cooldown for overload alerts
+};
+
+let messageRateBuffer = [];
+const MESSAGE_RATE_WINDOW = 10; // Calculate rate over last 10 seconds
+let lastPerformanceUpdate = Date.now();
+const PERFORMANCE_UPDATE_INTERVAL = 1000; // Update performance metrics every 1 second
+
+// Performance thresholds for detecting server overload
+const PERFORMANCE_THRESHOLDS = {
+    eventLoopLag: 100, // ms - warning if event loop lag > 100ms
+    memoryUsage: 0.95, // Warn if using > 95% of heap (Node.js can handle high heap usage)
+    processingTime: 50, // ms - warn if telemetry processing > 50ms
+    messageRate: 100, // messages/second - expected max rate for alerting
+    overloadThreshold: 5 // Number of consecutive overload detections before alerting (increased)
+};
 
 // CSV Buffering Configuration
 let csvBuffer = [];
@@ -136,6 +373,16 @@ function parseTelemetryData(data) {
 }
 
 // CSV Buffer Management Functions
+function convertBooleansForCsv(telemetry) {
+    // Create a copy of the telemetry object with boolean values converted to 1/0
+    const csvTelemetry = { ...telemetry };
+    csvTelemetry.gps_valid = telemetry.gps_valid ? 1 : 0;
+    csvTelemetry.pressure_valid = telemetry.pressure_valid ? 1 : 0;
+    csvTelemetry.imu_valid = telemetry.imu_valid ? 1 : 0;
+    csvTelemetry.power_valid = telemetry.power_valid ? 1 : 0;
+    return csvTelemetry;
+}
+
 async function flushCsvBuffer() {
     if (csvBuffer.length === 0 || !csvWriter) {
         return;
@@ -161,7 +408,9 @@ async function flushCsvBuffer() {
 }
 
 function addToCsvBuffer(telemetry) {
-    csvBuffer.push(telemetry);
+    // Convert boolean values to 1/0 for faster CSV logging
+    const csvTelemetry = convertBooleansForCsv(telemetry);
+    csvBuffer.push(csvTelemetry);
     
     // Emit buffer status to clients
     io.emit('csv-buffer-status', { 
@@ -214,6 +463,9 @@ io.on('connection', (socket) => {
     // Send current data to new client
     socket.emit('telemetry-history', telemetryData);
     
+    // Send current performance metrics to new client
+    socket.emit('performance-metrics', performanceMetrics);
+    
     // Handle serial port connection request
     socket.on('connect-serial', async (portName, baudRate) => {
         try {
@@ -243,10 +495,21 @@ io.on('connection', (socket) => {
             });
             
             parser.on('data', async (data) => {
+                const processingStartTime = process.hrtime();
+                
                 debugLog(`Raw serial data received: "${data}"`);
                 
+                // Track message rate
+                const currentTime = Date.now();
+                messageRateBuffer.push(currentTime);
+                performanceMetrics.totalMessagesReceived++;
+                performanceMetrics.lastMessageTime = currentTime;
+                
                 // Emit raw data to all clients for terminal display
+                const socketStartTime = process.hrtime();
                 io.emit('raw-data', data.trim());
+                const socketDelta = process.hrtime(socketStartTime);
+                performanceMetrics.socketEmitTime = (socketDelta[0] * 1e9 + socketDelta[1]) / 1e6; // Convert to ms
                 
                 const telemetry = parseTelemetryData(data);
                 if (telemetry) {
@@ -268,14 +531,21 @@ io.on('connection', (socket) => {
                     
                     // Add to CSV buffer (buffered writing for efficiency)
                     if (csvWriter) {
+                        const csvStartTime = process.hrtime();
                         debugLog('Adding telemetry to CSV buffer...');
                         addToCsvBuffer(telemetry);
+                        const csvDelta = process.hrtime(csvStartTime);
+                        performanceMetrics.csvWriteTime = (csvDelta[0] * 1e9 + csvDelta[1]) / 1e6; // Convert to ms
                     } else {
                         debugLog('No CSV writer available');
                     }
                 } else {
                     debugLog('Failed to parse telemetry data');
                 }
+                
+                // Calculate total processing time
+                const processingDelta = process.hrtime(processingStartTime);
+                performanceMetrics.telemetryProcessingTime = (processingDelta[0] * 1e9 + processingDelta[1]) / 1e6; // Convert to ms
             });
             
         } catch (error) {
@@ -434,4 +704,7 @@ server.listen(PORT, '0.0.0.0', () => {
     console.log('');
     console.log('Make sure your firewall allows connections on port', PORT);
     console.log('='.repeat(60));
+    
+    // Start performance monitoring after server starts
+    startPerformanceMonitoring();
 });

@@ -69,9 +69,6 @@
                 <label>
                     <input type="checkbox" id="debug-mode"> Debug Mode
                 </label>
-                <label>
-                    <input type="checkbox" id="full-logging"> Full Telemetry Logging
-                </label>
             </div>
         </div>
 
@@ -79,9 +76,6 @@
             <h3>Serial Terminal</h3>
             <div class="terminal-controls">
                 <div class="terminal-control-group">
-                    <label>
-                        <input type="checkbox" id="discard-telemetry" checked> Hide Telemetry Packets
-                    </label>
                     <button id="clear-terminal" class="btn btn-secondary">Clear Terminal</button>
                 </div>
                 <div class="terminal-input-group">
@@ -100,6 +94,7 @@
                 <button id="sleep-cmd" class="btn btn-control btn-sleep" disabled>SLEEP</button>
                 <button id="maint-cmd" class="btn btn-control btn-maint" disabled>MAINT</button>
                 <button id="flight-cmd" class="btn btn-control btn-flight" disabled>FLIGHT</button>
+                <button id="camera-cmd" class="btn btn-control btn-camera" disabled>CAMERA</button>
             </div>
             <div class="control-status">
                 <span class="control-label">Last Command:</span>
@@ -294,17 +289,6 @@
                     </div>
                 </div>
             </div>
-        </div>
-
-        <div class="log-panel">
-            <h3>Telemetry Log</h3>
-            <div class="log-controls">
-                <label>
-                    <input type="checkbox" id="auto-scroll" checked> Auto-scroll
-                </label>
-                <button id="export-csv" class="btn btn-info">Export CSV</button>
-            </div>
-            <div id="telemetry-log" class="log-content"></div>
         </div>
     </div>
 
