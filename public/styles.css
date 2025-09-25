@@ -843,7 +843,7 @@ select:focus, input:focus {
     font-weight: 700;
     color: #00ccff;
     font-size: 1.1em;
-    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    font-family: 'Courier New', 'Consolas', 'Monaco', monospace;
     text-shadow: 0 0 3px rgba(0, 204, 255, 0.4);
 }
 
@@ -1482,7 +1482,7 @@ select:focus, input:focus {
 
 .orientation-item .value {
     color: #00ff00;
-    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    font-family: 'Courier New', 'Consolas', 'Monaco', monospace;
     font-weight: bold;
     text-shadow: 0 0 5px rgba(0, 255, 0, 0.5);
     min-width: 60px;

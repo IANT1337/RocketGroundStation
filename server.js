@@ -282,6 +282,9 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Serve Chart.js from node_modules
 app.use('/chart.js', express.static(path.join(__dirname, 'node_modules/chart.js/dist')));
 
+// Serve Moment.js from node_modules
+app.use('/moment', express.static(path.join(__dirname, 'node_modules/moment/min')));
+
 // Initialize CSV writer
 function initializeCsvWriter() {
     const timestamp = moment().format('YYYY-MM-DD_HH-mm-ss');
@@ -349,12 +352,12 @@ function parseTelemetryData(data) {
         gps_valid: parts[8] === '1' || parts[8].toLowerCase() === 'true',
         pressure_valid: parts[9] === '1' || parts[9].toLowerCase() === 'true',
         // IMU data from MPU9250
-        accel_x: parseFloat(parts[10]), // Accelerometer X (g)
+        accel_x: -parseFloat(parts[12]), // Accelerometer X (g) - corrected: was Z, inverted sign
         accel_y: parseFloat(parts[11]), // Accelerometer Y (g)
-        accel_z: parseFloat(parts[12]), // Accelerometer Z (g)
-        gyro_x: parseFloat(parts[13]), // Gyroscope X (deg/s)
+        accel_z: -parseFloat(parts[10]), // Accelerometer Z (g) - corrected: was X, inverted sign
+        gyro_x: -parseFloat(parts[15]), // Gyroscope X (deg/s) - corrected: was Z, inverted sign
         gyro_y: parseFloat(parts[14]), // Gyroscope Y (deg/s)
-        gyro_z: parseFloat(parts[15]), // Gyroscope Z (deg/s)
+        gyro_z: -parseFloat(parts[13]), // Gyroscope Z (deg/s) - corrected: was X, inverted sign
         mag_x: parseFloat(parts[16]), // Magnetometer X (µT)
         mag_y: parseFloat(parts[17]), // Magnetometer Y (µT)
         mag_z: parseFloat(parts[18]), // Magnetometer Z (µT)

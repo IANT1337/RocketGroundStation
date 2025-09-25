@@ -1347,7 +1347,7 @@ function initializeEventListeners() {
         const port = elements.portSelect.value;
         const baudRate = elements.baudRate.value;
         
-        if (!port) {
+        if (!port || port.trim() === '' || port === 'Select Port...') {
             alert('Please select a serial port');
             return;
         }
